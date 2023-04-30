@@ -1,0 +1,6 @@
+config.json
+testlog.txt
+node_modules/
+.vscode/
+dc-js/
+mc-js/

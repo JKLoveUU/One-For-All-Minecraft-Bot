@@ -1,0 +1,36 @@
+{
+  "name": "bot2",
+  "version": "1.0.0",
+  "description": "minecraft bot for mcfallout server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "b": "pkg -t node16-win index.js -o t/abc.exe"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JKLoveUU/Bot2.git"
+  },
+  "files": [
+    "index.js",
+    "generalbot.js"
+  ],
+  "pkg": {
+    "assets": [
+      "generalbot.js"
+    ]
+  },
+  "author": "JKLove",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/JKLoveUU/Bot2/issues"
+  },
+  "homepage": "https://github.com/JKLoveUU/Bot2#readme",
+  "dependencies": {
+    "toml-require": "^1.2.0",
+    "@discordjs/rest": "^1.7.0",
+    "axios": "^0.24.0",
+    "discord.js": "^13.15.1",
+    "moment": "^2.29.1"
+  }
+}
