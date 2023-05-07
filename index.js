@@ -6,6 +6,7 @@ const fs = require('fs');
 // const { testf } = require('./lib/test.js');
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
+const { Vec3 } = require('vec3')
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { REST } = require('@discordjs/rest');
@@ -16,15 +17,13 @@ const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 let botMenuId = undefined;
 let botMenuLastUpdate = new Date();
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
-// const configPath = path.join(__dirname, 'config.toml'); // 使用相对路径访问文件
-// const config = toml.parse(fs.readFileSync(configPath, 'utf8'));
-//create logs dir if not exist
-const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir);
+
+//const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync('logs')) {
+    fs.mkdirSync('logs');
 }
-const logFilePath = path.join(logsDir, "lastest" + ".log");
-const logFile = fs.createWriteStream(logFilePath, { flags: 'a' });
+//const logFilePath = path.join(logsDir, "lastest" + ".log");
+const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
 function myLog(...args) {
     const prefix = '[LOG]';
     const message = `[${new Date()}] ${prefix} ${args.join(' ')}\n`;
@@ -55,6 +54,7 @@ const bots = {
             this.name.push(name)
             this.bots.push(
                 {
+                    name: name,
                     c: child,
                     logTime: new Date(),
                     status: 0,
@@ -62,12 +62,37 @@ const bots = {
             )
         } else {
             this.bots[this.name.indexOf(name)] = {
+                name: name,
                 c: child,
                 logTime: new Date(),
                 status: 0,
             }
         }
-    }
+    },
+    async getBotInfo(index) {
+        let crt;
+        if (isNaN(index)) {
+            let i = this.name.indexOf(index)
+            if (i === -1) crt = -1
+            crt = this.bots[i]
+        } else if (index >= this.name.length) crt = -1
+        else crt = this.bots[index]
+        if (crt == -1) {
+            return -1
+        } else {
+            let botinfo = {
+                name: crt.name,
+                avatar: `https://mc-heads.net/avatar/${targetBot}/64`,
+                server: -1,
+                coin: -1,
+                balance: -1,
+                position: new Vec3(0, 0, 0),
+                currentTask: [],
+                tasks: [],
+            };
+            return botinfo
+        }
+    },
 };
 //const dc = require("./lib/discordManager")(config,dataManager,bots);
 let currentSelect = -1;
@@ -75,21 +100,22 @@ const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer: (line) => {
-        const completions = ['.switch', '.exit', '.close', '.test', '.reload'];
+        const completions = ['.switch', '.exit', '.close', '.test', '.reload', '.ff'];
         const hits = completions.filter((c) => c.startsWith(line));
         return [hits.length ? hits : completions, line];
     },
 });
-// 启动 readline.Interface 实例
 rl.prompt();
-// 监听 'line' 事件
-rl.on('line', (input) => {
+rl.on('line', async (input) => {
     let cs = bots.getBot(currentSelect)
     //console.log(cs)
     if (input.startsWith('.')) {
         const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
-        console.log(`收到指令 ${rlCommandName}`)
+       // console.log(`收到指令 ${rlCommandName}`)
         switch (rlCommandName.substring(1)) {
+            case 'ff':    //debug
+                process.exit()
+                break;
             case 'eval':    //debug
                 eval(input.substring(6))
                 break;
@@ -114,6 +140,15 @@ rl.on('line', (input) => {
                 }
                 break;
             case 'test':
+                // const channel2 = await client.channels.cache.get(config.discord_setting.channelId);
+                // if (channel2) {
+                //     const message = await channel2.messages.fetch(rlargs[0], { force: true }).catch(console.error);
+                //     if (message) {
+                //         console.log('Message still exists!');
+                //     } else {
+                //         console.log('Message does not exist!');
+                //     }
+                // }
                 myLog(rlargs);
                 break;
             case 'switch':
@@ -137,7 +172,6 @@ rl.on('line', (input) => {
     }
     rl.prompt();
 });
-// 监听 'close' 事件
 rl.on('close', async () => {
     //console.log('退出readLine');
     await handleClose()
@@ -146,8 +180,9 @@ client.on('ready', async () => {
     console.log(`Discord bot Logged in as ${client.user.tag}`);
     client.user.setPresence({
         activities: [{
-            name: 'In Service',
-            //type: 'Custom',
+            name: '123',
+            type: 3,
+            url: 'https://www.twitch.tv/nacho_dayo',
         }],
         status: 'online',
     });
@@ -180,7 +215,9 @@ client.on('ready', async () => {
     let newbotMenuId = await channel.send(generateBotMenu());
     botMenuId = newbotMenuId.id
     setInterval(async () => {
+        let channel = client.channels.cache.get(config.discord_setting.channelId);  //error here bug
         let oldmenu = await getChannelMsgFetch(channel, botMenuId)
+        //console.log(oldmenu)
         if (oldmenu) {
             await oldmenu.edit(generateBotMenu());
         } else {
@@ -195,50 +232,67 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.customId.startsWith('botmenu')) {
         return
     }
-    switch (interaction.customId) {
-        case 'botmenu-refresh-btn':
-            await interaction.update(generateBotMenu());
-            break;
-        case 'botmenu-shift-btn':
-            const message = await interaction.channel.messages.fetch(interaction.message.id);
-            let newbotMenuId = await interaction.channel.send(generateBotMenu());
-            botMenuId = newbotMenuId.id
-            await message.delete();
-            break;
-        case 'botmenu-close-btn':
-            const closeConfirmButon = interaction.component
-                .setCustomId('botmenu-close-confirm')
-                .setLabel('Click Again To close')
-                .setStyle('DANGER')
-                .setEmoji('⚪');
-            const [row1, row2] = interaction.message.components;
-            await interaction.update({
-                components: [
-                    new MessageActionRow().addComponents(row1.components),
-                    new MessageActionRow().addComponents(row2.components),
-                ],
-            });
+    if (interaction.isButton()) {
+        switch (interaction.customId) {
+            case 'botmenu-refresh-btn':
+                await interaction.update(generateBotMenu());
+                break;
+            case 'botmenu-shift-btn':
+                const message = await interaction.channel.messages.fetch(interaction.message.id);
+                let newbotMenuId = await interaction.channel.send(generateBotMenu());
+                botMenuId = newbotMenuId.id
+                await message.delete();
+                break;
+            case 'botmenu-close-btn':
+                const closeConfirmButon = interaction.component
+                    .setCustomId('botmenu-close-confirm-btn')
+                    .setLabel('Click Again To close')
+                    .setStyle('DANGER')
+                    .setEmoji('⚪');
+                const [row1, row2] = interaction.message.components;
+                await interaction.update({
+                    components: [
+                        new MessageActionRow().addComponents(row1.components),
+                        new MessageActionRow().addComponents(row2.components),
+                    ],
+                });
 
-            break;
-        case 'botmenu-close-confirm':
-            await interaction.reply({
-                content: 'bot close',
-                ephemeral: true
-            })
-            await handleClose()
-            break;
-        default:
-            await notImplementYet(interaction);
-            break;
+                break;
+            case 'botmenu-close-confirm-btn':
+                await interaction.reply({
+                    content: 'bot close',
+                    ephemeral: true
+                })
+                await handleClose()
+                break;
+            default:
+                await notImplementYet(interaction);
+                break;
+        }
+    } else if (interaction.isSelectMenu()) {
+        const { customId, values } = interaction;
+        if (customId === 'botmenu-select') {
+            targetBot = values[0].slice(15)
+            console.log(targetBot)
+            //  console.log(bots.getBot(targetBot))
+            //need check status here
+            botinfo = await bots.getBotInfo(targetBot)
+            interaction.reply(generateBotControlMenu(botinfo))
+        } else await notImplementYet(interaction);
+    } else {
+        await notImplementYet(interaction);
     }
+
 })
 process.on('uncaughtException', err => {
     console.log('Uncaught:\n', err)
+    console.log('PID:', process.pid)
 })
+
 process.on('SIGINT', handleClose);
 process.on('SIGTERM', handleClose);
 console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
-//console.log(config)
+
 client.login(config.discord_setting.token)
 main()
 function main() {
@@ -301,17 +355,19 @@ function createGeneralBot(name) {
 async function getChannelMsgFetch(channel, id) {
     let oldmenu;
     try {
-        oldmenu = await channel.messages.fetch(id);
+        oldmenu = await channel.messages.fetch(id, { force: true });
         return oldmenu;
     } catch (error) {
-        console.log(error)
+        //console.log(error)
         return undefined;
     }
 }
 async function setBotMenuNotInService() {
     //onsole.log("setBotMenuNotInService")
     const channel = client.channels.cache.get(config.discord_setting.channelId);
+    //const channel = client.channels.cache.get(config.discord_setting.channelId);    //error here bug
     let oldmenu = await getChannelMsgFetch(channel, botMenuId)
+    //console.log(oldmenu)
     if (!oldmenu) return
     //const embed = generateBotMenuEmbed();
     const closeComponents = oldmenu.components.map(row => {
@@ -355,7 +411,7 @@ function generateBotMenu() {
         opts.push({
             label: `${bots.name[i]}`,
             // description: 'Open menu of Basic operations',
-            value: `botmenu-select-${bots.name[i]}`,
+            value: `botmenu-select-${bots.name[i]}`,            //need fix
         })
     }
     const row1 = new MessageActionRow().addComponents(
@@ -383,7 +439,8 @@ function generateBotMenu() {
             .setMaxValues(1)
             .addOptions(opts)
     );
-    return { embeds: [embed], components: [row1, row2] }
+    let b_components = !opts.length ? [row1]:[row1, row2];
+    return { embeds: [embed], components: b_components }
 }
 function generateBotMenuEmbed() {
     const author = {
@@ -412,6 +469,119 @@ function generateBotMenuEmbed() {
         .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
+
+
+function generateBotControlMenu(botinfo) {
+    const embed = generateBotControlMenuEmbed(botinfo);
+    const row1 = new MessageActionRow().addComponents(
+        // new MessageButton()
+        //   .setCustomId('ping-btn')
+        //   .setLabel('Ping')
+        //   .setStyle('PRIMARY'),
+        new MessageButton()
+            .setCustomId('time-btn')
+            .setLabel('Current Time')
+            .setStyle('PRIMARY'),
+        // new MessageButton()
+        //   .setCustomId('new-btn')
+        //   .setLabel('New Button')
+        //   .setStyle('PRIMARY'),
+        new MessageButton()
+            .setCustomId('newest-btn')
+            .setLabel('下移')
+            .setStyle('SECONDARY'),
+        new MessageButton()
+            .setCustomId('refresh-btn')
+            .setLabel('Refresh')
+            .setStyle('SUCCESS')
+            .setEmoji('♻️'),
+        new MessageButton()
+            .setCustomId('close-btn')
+            .setLabel('Close')
+            .setStyle('DANGER')
+            .setEmoji('⚪')
+
+    );
+    const row2 = new MessageActionRow().addComponents(
+        new MessageSelectMenu()
+            .setCustomId('menu-select')
+            .setPlaceholder('Select an option')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions([
+                {
+                    label: '基礎操作',
+                    description: 'Open menu of Basic operations',
+                    value: 'basic-operations-menu',
+                    emoji: '🛠️',
+                },
+                {
+                    label: '地圖畫功能',
+                    description: 'Open menu of mapart',
+                    value: 'mapart-menu',
+                    emoji: '🗺️',
+                },
+                {
+                    label: '倉庫管理功能',
+                    description: 'Open menu of warehouse manager system',
+                    value: 'wms-menu',
+                    emoji: '🏬',
+                },
+                {
+                    label: 'Ping',
+                    description: 'This is option 1',
+                    value: 'ping',
+                    emoji: '🔥',
+                },
+                {
+                    label: 'Current Time',
+                    description: 'Show Current Time',
+                    value: 'time',
+                    emoji: '🔥',
+                },
+                {
+                    label: 'New Button',
+                    description: 'Create message with button',
+                    value: 'button',
+                    emoji: '🔥',
+                },
+                {
+                    label: 'Permissions',
+                    description: 'not implement yet',
+                    value: 'permission-menu',
+                    emoji: '🔥',
+                },
+            ])
+    );
+    return { content: `Control Panel for bot - ${botinfo.name}`, embeds: [embed], components: [row1, row2] };
+}
+function generateBotControlMenuEmbed(botinfo) {
+    const author = {
+        name: botinfo.name,
+        iconURL: botinfo.avatar,
+        url: 'https://discord.js.org',
+    };
+
+    const embed = new MessageEmbed()
+        //.setDescription('Choose one of the following options:')
+        .setAuthor(author)
+        .setColor('#7CFC00')
+        .setThumbnail(botinfo.avatar)
+        .addFields(
+            { name: ':globe_with_meridians:分流', value: `${'`' + (botinfo.server).toString().padEnd(3) + '`'}`, inline: true },
+            { name: ':coin:Coin', value: '`' + botinfo.coin.toString().padEnd(7) + '`', inline: true },
+            { name: ':moneybag:Balance', value: '`' + botinfo.balance.toString().padEnd(14) + '`', inline: true },
+            { name: ':triangular_flag_on_post:座標', value: `X:${'`' + botinfo.position.x.toString().padStart(7) + '`'} Y:${'`' + botinfo.position.y.toString().padStart(7) + '`'} Z:${'`' + botinfo.position.z.toString().padStart(7) + '`'}`, inline: false },
+            //{ name: '\u200B', value: '\u200B' },
+            { name: ':arrow_forward:當前任務', value: "task 0\n" },
+            //{ name: '\u200b', value: '\u200b', inline: false }, // This creates an empty field to ensure the next row starts on a new line
+            { name: `:pencil:任務列隊 ${3} PAGE ${1}`, value: "task 1\ntask 2\ntask 3" },
+        )
+        .setTimestamp()
+        .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+    return embed;
+}
+
 async function notImplementYet(interaction) {
     await interaction.reply({
         content: 'Not Implement yet',
@@ -434,5 +604,8 @@ const botstatus = {
     1: 'free',
     2: 'in tasking',
     3: 'raid',
-    1000: 'Profile Not Found'
+    1000: 'Profile Not Found',
+    2000: 'raid - closed',
+    2001: 'raid - restart',
+    3000: 'general - closed',
 };

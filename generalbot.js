@@ -50,8 +50,9 @@ const bot = (() => { // createMcBot
     //   console.log(message)
     //  // bot.chat(message)
     // })
-    bot.on('error', (reason) => {
-        console.log("err " + reason)
+    bot.on('error', (error) => {
+        console.log("err " + error)
+        console.log('err code '+ error.code)
         kill(1000)
     })
     bot.on('kick', (reason) => {
@@ -77,6 +78,9 @@ function kill(code = 1000) {
 }
 process.on('message', (message) => {
     switch (message.type) {
+        case 'date':
+            console.log(message.text)
+            break;
         case 'cmd':
             //交給CommandManager
             break;
