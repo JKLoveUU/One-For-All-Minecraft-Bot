@@ -7,6 +7,7 @@ const fs = require('fs');
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
 const { Vec3 } = require('vec3')
+const EventEmitter = require('events');
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { REST } = require('@discordjs/rest');
@@ -31,11 +32,11 @@ function myLog(...args) {
 }
 myLog(`Bot Start at ${new Date().toString()}`);
 const dataManager = {
-
 }
 const bots = {
     name: [],
     bots: [],
+    handle: new EventEmitter(),
     /**
      * 
      * @param {string | number} index 
@@ -61,13 +62,15 @@ const bots = {
                 }
             )
         } else {
-            this.bots[this.name.indexOf(name)] = {
-                name: name,
-                c: child,
-                logTime: new Date(),
-                status: 0,
-            }
+            this.bots[this.name.indexOf(name)].c = child;
+            this.bots[this.name.indexOf(name)].logTime = new Date();
         }
+    },
+    setBotStatus(name, status) {
+        let b = this.getBot(name)
+        //console.log(b)
+        if (b === -1) return
+        b.status = status;
     },
     async getBotInfo(index) {
         let crt;
@@ -80,19 +83,50 @@ const bots = {
         if (crt == -1) {
             return -1
         } else {
+            //console.log('data rqing ...')
+            d = await this.getBotData(crt.name)
             let botinfo = {
-                name: crt.name,
-                avatar: `https://mc-heads.net/avatar/${targetBot}/64`,
-                server: -1,
-                coin: -1,
-                balance: -1,
-                position: new Vec3(0, 0, 0),
-                currentTask: [],
-                tasks: [],
+                id: crt.name,
+                name: d.name,
+                avatar: `https://mc-heads.net/avatar/${d.name}/64`,
+                server: d.server,
+                coin: d.coin,
+                balance: d.balance,
+                position: d.position,
+                tasks: d.tasks,
+                runingTask: d.runingTask
             };
             return botinfo
         }
     },
+    async getBotData(name) {
+        let crt;
+        if (isNaN(name)) {
+            let i = this.name.indexOf(name)
+            if (i === -1) crt = -1
+            crt = this.bots[i]
+        } else if (name >= this.name.length) crt = -1
+        else crt = this.bots[name]
+        if (crt == -1) {
+            return -1
+        }
+        return new Promise((resolve, reject) => {
+            var timer = setTimeout(() => {
+                // console.log('data Time out',name)
+                bots.handle.off('data', setdata);
+                reject()
+            }, 100)
+            bots.handle.on('data', setdata)
+            crt.c.send({ type: 'dataRequire' });
+            function setdata(data, nm) {
+                if (name != nm) return;
+                clearTimeout(timer)
+                // console.log('getData',name)
+                bots.handle.off('data', setdata);
+                resolve(data);
+            }
+        })
+    }
 };
 //const dc = require("./lib/discordManager")(config,dataManager,bots);
 let currentSelect = -1;
@@ -111,7 +145,7 @@ rl.on('line', async (input) => {
     //console.log(cs)
     if (input.startsWith('.')) {
         const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
-       // console.log(`收到指令 ${rlCommandName}`)
+        // console.log(`收到指令 ${rlCommandName}`)
         switch (rlCommandName.substring(1)) {
             case 'ff':    //debug
                 process.exit()
@@ -120,9 +154,12 @@ rl.on('line', async (input) => {
                 eval(input.substring(6))
                 break;
             case 'list':
+                const longestLength = bots.name.reduce((longest, a) => {
+                    return a.length > longest ? a.length : longest;
+                }, 0);
                 console.log(`目前共 ${bots.name.length} 隻bot`)
                 for (i in bots.name) {
-                    console.log(`${i}. ${bots.name[i]} ${bots.bots[i].status}`)
+                    console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${bots.bots[i].status}`)
                 }
                 break;
             case 'exit':
@@ -140,6 +177,15 @@ rl.on('line', async (input) => {
                 }
                 break;
             case 'test':
+
+                client.api.interactions(rlargs[0]).get().then(interaction => {
+                    // do something with the interaction
+                    console.log(interaction);
+                }).catch(error => {
+                    // handle error
+                    console.error(error);
+                });
+
                 // const channel2 = await client.channels.cache.get(config.discord_setting.channelId);
                 // if (channel2) {
                 //     const message = await channel2.messages.fetch(rlargs[0], { force: true }).catch(console.error);
@@ -228,10 +274,11 @@ client.on('ready', async () => {
 });
 //botmenu handler 
 client.on('interactionCreate', async (interaction) => {
-    console.log(interaction.customId)
+    //  console.log(interaction)
     if (!interaction.customId.startsWith('botmenu')) {
         return
     }
+    console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
     if (interaction.isButton()) {
         switch (interaction.customId) {
             case 'botmenu-refresh-btn':
@@ -260,13 +307,14 @@ client.on('interactionCreate', async (interaction) => {
                 break;
             case 'botmenu-close-confirm-btn':
                 await interaction.reply({
-                    content: 'bot close',
+                    content: 'bot closing',
                     ephemeral: true
                 })
+                console.log(`Bot close by Discord - ${interaction.user.username}`)
                 await handleClose()
                 break;
             default:
-                await notImplementYet(interaction);
+                await notImplemented(interaction);
                 break;
         }
     } else if (interaction.isSelectMenu()) {
@@ -278,16 +326,42 @@ client.on('interactionCreate', async (interaction) => {
             //need check status here
             botinfo = await bots.getBotInfo(targetBot)
             interaction.reply(generateBotControlMenu(botinfo))
-        } else await notImplementYet(interaction);
+        } else await notImplemented(interaction);
     } else {
-        await notImplementYet(interaction);
+        await notImplemented(interaction);
     }
 
-})
+});
+//botcontrolmenu handler
+client.on('interactionCreate', async (interaction) => {
+    //  console.log(interaction)
+    if (!interaction.customId.startsWith('botcontrolmenu')) {
+        return
+    }
+    console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+    if (interaction.isButton()) {
+        switch (interaction.customId) {
+            case 'botcontrolmenu-close-btn':
+                await interaction.message.delete();
+                break;
+            default:
+                await notImplemented(interaction);
+                break;
+        }
+    } else if (interaction.isSelectMenu()) {
+        const { customId, values } = interaction;
+        if (customId === 'botmenu-select') {
+            console.log(values[0])
+            await notImplemented(interaction);
+        } else await notImplemented(interaction);
+    } else {
+        await notImplemented(interaction);
+    }
+});
 process.on('uncaughtException', err => {
     console.log('Uncaught:\n', err)
     console.log('PID:', process.pid)
-})
+});
 
 process.on('SIGINT', handleClose);
 process.on('SIGTERM', handleClose);
@@ -312,9 +386,7 @@ function main() {
             createGeneralBot(config.account.id[i]);
             tmp += 200;
         }, tmp);
-
     }
-
 }
 async function handleClose() {
     console.log('Closing application...');
@@ -349,6 +421,23 @@ function createGeneralBot(name) {
             console.log("bot will restart at 10 second")
             // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
             setTimeout(() => { createGeneralBot(name) }, 10_000)
+        }
+    })
+    child.on('message', m => {
+        switch (m.type) {
+            case 'setCD':
+                restartcd = m.value
+                break
+            case 'setStatus':
+                //console.log('setStatus')
+                //console.log(m)
+                bots.setBotStatus(name, m.value)
+                break
+            case 'dataToParent':
+                //console.log('setStatus')
+                // console.log(m.value)
+                bots.handle.emit('data', m.value, name)
+                break
         }
     })
 }
@@ -398,7 +487,7 @@ async function setBotMenuNotInService() {
         .setColor('RED')
         .setThumbnail("https://i.imgur.com/AfFp7pu.png")
         .addFields(
-            { name: `目前共 \`${0}\` 隻 bot`, value: '\`Not In Service\`' },
+            { name: `目前共 \`${'-'}\` 隻 bot`, value: '\`Not In Service\`' },
         )
         .setTimestamp()
         .setFooter({ text: '關閉於', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
@@ -439,7 +528,7 @@ function generateBotMenu() {
             .setMaxValues(1)
             .addOptions(opts)
     );
-    let b_components = !opts.length ? [row1]:[row1, row2];
+    let b_components = !opts.length ? [row1] : [row1, row2];
     return { embeds: [embed], components: b_components }
 }
 function generateBotMenuEmbed() {
@@ -453,10 +542,11 @@ function generateBotMenuEmbed() {
         return a.length > longest ? a.length : longest;
     }, 0);
     for (let i = 0; i < bots.bots.length; i++) {
-        botsfield += (`${i})`.padEnd(parseInt(bots.bots.length / 10) + 2))
+        botsfield += (`${i})`.padStart(parseInt(bots.bots.length / 10) + 2))
         botsfield += (` ${bots.name[i]}`.padEnd(longestLength + 1))
         botsfield += (` ${botstatus[bots.bots[i].status]}\n`)
     }
+    botsfield = botsfield ? (`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
         .setAuthor(author)
@@ -469,8 +559,6 @@ function generateBotMenuEmbed() {
         .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
-
-
 function generateBotControlMenu(botinfo) {
     const embed = generateBotControlMenuEmbed(botinfo);
     const row1 = new MessageActionRow().addComponents(
@@ -479,7 +567,7 @@ function generateBotControlMenu(botinfo) {
         //   .setLabel('Ping')
         //   .setStyle('PRIMARY'),
         new MessageButton()
-            .setCustomId('time-btn')
+            .setCustomId('botcontrolmenu-time-btn')
             .setLabel('Current Time')
             .setStyle('PRIMARY'),
         // new MessageButton()
@@ -487,24 +575,24 @@ function generateBotControlMenu(botinfo) {
         //   .setLabel('New Button')
         //   .setStyle('PRIMARY'),
         new MessageButton()
-            .setCustomId('newest-btn')
+            .setCustomId('botcontrolmenu-newest-btn')
             .setLabel('下移')
             .setStyle('SECONDARY'),
         new MessageButton()
-            .setCustomId('refresh-btn')
+            .setCustomId('botcontrolmenu-refresh-btn')
             .setLabel('Refresh')
             .setStyle('SUCCESS')
             .setEmoji('♻️'),
         new MessageButton()
-            .setCustomId('close-btn')
-            .setLabel('Close')
+            .setCustomId('botcontrolmenu-close-btn')
+            .setLabel('Close Panel')
             .setStyle('DANGER')
             .setEmoji('⚪')
 
     );
     const row2 = new MessageActionRow().addComponents(
         new MessageSelectMenu()
-            .setCustomId('menu-select')
+            .setCustomId('botcontrolmenu-select')
             .setPlaceholder('Select an option')
             .setMinValues(1)
             .setMaxValues(1)
@@ -512,48 +600,48 @@ function generateBotControlMenu(botinfo) {
                 {
                     label: '基礎操作',
                     description: 'Open menu of Basic operations',
-                    value: 'basic-operations-menu',
+                    value: 'botcontrolmenu-basic-operations-menu',
                     emoji: '🛠️',
                 },
                 {
                     label: '地圖畫功能',
                     description: 'Open menu of mapart',
-                    value: 'mapart-menu',
+                    value: 'botcontrolmenu-mapart-menu',
                     emoji: '🗺️',
                 },
                 {
                     label: '倉庫管理功能',
                     description: 'Open menu of warehouse manager system',
-                    value: 'wms-menu',
+                    value: 'botcontrolmenu-wms-menu',
                     emoji: '🏬',
                 },
                 {
                     label: 'Ping',
                     description: 'This is option 1',
-                    value: 'ping',
+                    value: 'botcontrolmenu-ping',
                     emoji: '🔥',
                 },
                 {
                     label: 'Current Time',
                     description: 'Show Current Time',
-                    value: 'time',
+                    value: 'botcontrolmenu-time',
                     emoji: '🔥',
                 },
                 {
                     label: 'New Button',
                     description: 'Create message with button',
-                    value: 'button',
+                    value: 'botcontrolmenu-button',
                     emoji: '🔥',
                 },
                 {
                     label: 'Permissions',
                     description: 'not implement yet',
-                    value: 'permission-menu',
+                    value: 'botcontrolmenu-permission-menu',
                     emoji: '🔥',
                 },
             ])
     );
-    return { content: `Control Panel for bot - ${botinfo.name}`, embeds: [embed], components: [row1, row2] };
+    return { content: `Control Panel for bot - ${botinfo.id}`, embeds: [embed], components: [row1, row2] };
 }
 function generateBotControlMenuEmbed(botinfo) {
     const author = {
@@ -561,7 +649,13 @@ function generateBotControlMenuEmbed(botinfo) {
         iconURL: botinfo.avatar,
         url: 'https://discord.js.org',
     };
-
+    //console.log(botinfo)
+    let crtTask = botinfo.runingTask ? `\`${botinfo.tasks[0].displayName}\`` : '\`-\`';
+    let taskQueue = ''
+    for (let i = (botinfo.runingTask ? 1 : 0); i < botinfo.tasks.length; i++) {
+        taskQueue += '\`' + botinfo.tasks[i].displayName + '\`\n'
+    }
+    taskQueue = taskQueue ? taskQueue : '\`-\`'
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
         .setAuthor(author)
@@ -571,20 +665,35 @@ function generateBotControlMenuEmbed(botinfo) {
             { name: ':globe_with_meridians:分流', value: `${'`' + (botinfo.server).toString().padEnd(3) + '`'}`, inline: true },
             { name: ':coin:Coin', value: '`' + botinfo.coin.toString().padEnd(7) + '`', inline: true },
             { name: ':moneybag:Balance', value: '`' + botinfo.balance.toString().padEnd(14) + '`', inline: true },
-            { name: ':triangular_flag_on_post:座標', value: `X:${'`' + botinfo.position.x.toString().padStart(7) + '`'} Y:${'`' + botinfo.position.y.toString().padStart(7) + '`'} Z:${'`' + botinfo.position.z.toString().padStart(7) + '`'}`, inline: false },
+            {
+                name: ':triangular_flag_on_post:座標',
+                value: `X:${'`' + botinfo.position.x.toFixed(1).toString().padStart(7) + '`'} Y:${'`' + botinfo.position.y.toFixed(1).toString().padStart(7) + '`'} Z:${'`' + botinfo.position.z.toFixed(1).toString().padStart(7) + '`'}`
+                , inline: false
+            },
             //{ name: '\u200B', value: '\u200B' },
-            { name: ':arrow_forward:當前任務', value: "task 0\n" },
+            { name: ':arrow_forward:當前任務', value: crtTask },
             //{ name: '\u200b', value: '\u200b', inline: false }, // This creates an empty field to ensure the next row starts on a new line
-            { name: `:pencil:任務列隊 ${3} PAGE ${1}`, value: "task 1\ntask 2\ntask 3" },
+            { name: `:pencil:任務列隊 ${'-'} / ${botinfo.tasks.length} PAGE ${'-'}`, value: taskQueue },
         )
         .setTimestamp()
         .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
-
-async function notImplementYet(interaction) {
+function discordWhiteListCheck(member) {
+    // Check if the member is in the whitelist members
+    if (config.discord_setting.whitelist_members.includes(member.id)) {
+        return true;
+    }
+    // Check if the member has a whitelist role
+    if (member.roles.cache.some(role => config.discord_setting.whitelist_roles.includes(role.id))) {
+        return true;
+    }
+    // Member is not in whitelist
+    return false;
+}
+async function notImplemented(interaction) {
     await interaction.reply({
-        content: 'Not Implement yet',
+        content: 'Not Implemented',
         ephemeral: true
     })
 }
@@ -596,16 +705,27 @@ const exitcode = {
     1001: 'server reload',
     1002: 'client reload',
     1003: 'client error reload',
-    2001: 'config not found',   //不可重啟類
+    //  不可重啟類
+    2001: 'config not found',
     2002: 'config err',
 };
 const botstatus = {
-    0: 'closed',
+    //  通用區
+    0: 'Closed',    //正常關閉
     1: 'free',
     2: 'in tasking',
     3: 'raid',
-    1000: 'Profile Not Found',
-    2000: 'raid - closed',
-    2001: 'raid - restart',
-    3000: 'general - closed',
+    1000: 'Closed(Profile Not Found)',
+    //  Raid 區
+    2000: 'raid - closed', //unused
+    2001: 'Restarting',
+    2200: 'Running',
+    //  General 區
+    3000: 'general - closed',   //unused
+
+    3001: 'Logging in',
+    3002: 'Restarting',
+    3200: 'Running',
+
+    //    process.send({ type: 'setStatus', value: 1000 })
 };
