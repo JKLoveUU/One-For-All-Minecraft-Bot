@@ -1,4 +1,9 @@
-// console.log(process.argv)
+//console.log(process.argv)
+if (!process.argv[2]) {
+    return
+}
+let debug = process.argv.includes("--debug");
+let login = false
 const EventEmitter = require('events');
 const mineflayer = require("mineflayer");
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
@@ -7,7 +12,11 @@ const fs = require('fs');
 const fsp = require('fs').promises
 const { version } = require("os");
 const data = require('toml-require');
+process.send({ type: 'setReloadCD', value: 10_000 })
+//lib
+const mapart = require(`./lib/mapart`);
 if (!profiles[process.argv[2]]) {
+    //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
     process.send({ type: 'setStatus', value: 1000 })
     process.exit(2001)
@@ -53,6 +62,7 @@ const bot = (() => { // createMcBot
             /^Summoned to wait by CONSOLE$/,
             'wait'
         )
+        login = true
     })
     bot.on('message', async (jsonMsg) => {
         //console.log(jsonMsg.toString())
@@ -66,9 +76,12 @@ const bot = (() => { // createMcBot
         let playerID = args[0].slice(1, args[0].length);
         //console.log(playerID)
         let cmds = args.slice(3, args.length);
-        if (taskManager.isTask(cmds)) {
+        let isTask = taskManager.isTask(cmds)
+        if (isTask.vaild) {
+            let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
+            taskManager.assign(tk,isTask.longRunning)
             // console.log(taskManager.isImm(cmds))
-            taskManager.assign(new Task(undefined, cmds.join(' '), 'minecraft-dm', cmds.join(' '), undefined, undefined, playerID, undefined))
+
         }
         console.log(jsonMsg.toString())
     })
@@ -86,9 +99,9 @@ const bot = (() => { // createMcBot
         if (!server?.startsWith('分流')) return
         { botinfo.serverCH = server; update = true; }
         if (header[header.length - 29]?.text !== '낸') return
-        const bal = parseFloat(header[header.length - 28]?.text.replace(/,/g, '')); 
+        const bal = parseFloat(header[header.length - 28]?.text.replace(/,/g, ''));
         if (true || (bal >= 0 && grinde.bal - bal !== 1728 && grinde.bal !== bal)) { botinfo.balance = bal; update = true; }
-        if(update == true ) botinfo.tabUpdateTime = new Date();
+        if (update == true) botinfo.tabUpdateTime = new Date();
     })
     //---------------
     bot.on('error', async (error) => {
@@ -107,6 +120,11 @@ const bot = (() => { // createMcBot
         console.log(`${process.argv[2]} disconnect at ${new Date()}`)
         await kill(1000)
     })
+    bot.once('wait', async () => {
+        process.send({ type: 'setReloadCD', value: 120_000 })
+        console.log(`${process.argv[2]} send to wait ${new Date()}`)
+        await kill(1001)
+    })
     //init()
     return bot
 })()
@@ -114,7 +132,7 @@ const bot = (() => { // createMcBot
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
     console.log(`exiting in status ${code}`)
-    await taskManager.save();
+    if(login) await taskManager.save();
     bot.end()
     process.exit(code)
 }
@@ -165,58 +183,47 @@ const taskManager = {
             this.tasks = tt.tasks
             this.err_tasks = tt.err_tasks
         }
-        // this.eventl.on('commit', (task) => {
-        //     console.log('commit')
-        // });
-        // console.log(this.tasks.length)
-        // this.eventl.emit('commit');
+        console.log(`task init complete / ${this.tasks.length} tasks now`)
+        //自動執行
+        if (this.tasks.length!=0&&!this.tasking) await this.loop()
     },
     isTask(args) {
-        for (let i = 0; i < args.length; i++) {
-            if (commands[args[i]] !== undefined) {
-                return true;
-            }
-        }
-        return false
-    },
-    isImmediately(task, i = 0, g) {
-        return false
-        // if(i==0){
-        //     if (commands[args[i]]['imm'] !== undefined) {
-        //         return commands[args[i]]['imm'];
-        //     } else {
-        //         return isImm(args,i++,commands[args[i]]['group']);
-        //     }
-        // }else{
-        //     if (commands[g][args[i]]['imm'] !== undefined) {
-
-        //     }
+        // {
+        //     vaild: true,             
+        //     longRunning: false,
+        //     permissionRequre: 0,     //reserved             
         // }
-
+        let result
+        switch (true) {
+            case mapart.identifier.includes(args[0]):
+                result = mapart.parseCMD(args)
+                break;
+            default:
+                result = {
+                    vaild: true,
+                }
+                break;
+        }
+        return result
+        //return false
     },
     async execute(task) {
-        try {
-            while (1) {
-                if (this.tasking.length == 3) break
-                await sleep(1000)
-            }
-            //exe task
-        } catch (error) {
-            console.log("task執行錯誤")
-            console.log(task)
+        console.log("執行task")
+        console.log(task)
+        switch (true) {
+            case mapart.identifier.includes(task.content[0]):
+                await mapart.executeCMD(task.content)
+                break;
+            default:
+                break;
         }
     },
-    async assign(task, priority = 10) {
-        let isImm = this.isImmediately(task)
-        if (isImm) {
-            this.execute(task)
-        } else {
-            if (this.tasks.length == 0) {
-                this.tasks.push(task)
-            } else {
-                this.tasks.push(task)
-            }
+    async assign(task, longRunning = true) {
+        if (longRunning) {
+            this.tasks.push(task)
             if (!this.tasking) await this.loop()
+        } else {
+            this.execute(task)
         }
     },
     async loop() {

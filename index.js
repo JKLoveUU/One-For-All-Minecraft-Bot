@@ -1,14 +1,23 @@
 const path = require('path');
 const readline = require('readline');
 const { fork } = require('child_process');
-const mineflayer = require("mineflayer");
 const fs = require('fs');
-// const { testf } = require('./lib/test.js');
+
+// mc
+const rqgeneral = require(`./generalbot.js`)
+//const rqgeneral = fork(path.join(__dirname, 'generalbot.js'));
+//const mineflayer = require("mineflayer");
+//require(`${process.cwd()}/generalbot.js`)
+
+// configs
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
+const profiles = require(`${process.cwd()}/profiles.json`);
+
 const { Vec3 } = require('vec3')
 const EventEmitter = require('events');
 
+// Discord 
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
@@ -17,6 +26,8 @@ const rest = new REST({ version: '9' }).setToken(config.discord_setting.token);
 const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 let botMenuId = undefined;
 let botMenuLastUpdate = new Date();
+
+//
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
 //const logsDir = path.join(__dirname, 'logs');
@@ -25,12 +36,12 @@ if (!fs.existsSync('logs')) {
 }
 //const logFilePath = path.join(logsDir, "lastest" + ".log");
 const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
-function myLog(...args) {
+function logToFileAndConsole(...args) {
     const prefix = '[LOG]';
     const message = `[${new Date()}] ${prefix} ${args.join(' ')}\n`;
     logFile.write(message);
 }
-myLog(`Bot Start at ${new Date().toString()}`);
+logToFileAndConsole(`Bot Start at ${new Date().toString()}`);
 const dataManager = {
 }
 const bots = {
@@ -38,8 +49,9 @@ const bots = {
     bots: [],
     handle: new EventEmitter(),
     /**
-     * 
-     * @param {string | number} index 
+     * getBot
+     * @param {string | number} index index or name 
+     * @return {botsInstance}
      */
     getBot(index) {
         if (isNaN(index)) {
@@ -50,7 +62,7 @@ const bots = {
         if (index >= this.name.length) return -1
         return this.bots[index]
     },
-    setBot(name, child) {
+    setBot(name, child, type = null, crtType = null,debug) {
         if (this.name.indexOf(name) === -1) {
             this.name.push(name)
             this.bots.push(
@@ -59,11 +71,18 @@ const bots = {
                     c: child,
                     logTime: new Date(),
                     status: 0,
+                    type: type,
+                    crtType: crtType,
+                    reloadCD: 10_000,
+                    debug: debug ? true:false,
                 }
             )
         } else {
             this.bots[this.name.indexOf(name)].c = child;
             this.bots[this.name.indexOf(name)].logTime = new Date();
+            if (type != null) this.bots[this.name.indexOf(name)].type = type;
+            if (crtType != null) this.bots[this.name.indexOf(name)].crtType = crtType;
+            if (debug != null) this.bots[this.name.indexOf(name)].debug = debug;
         }
     },
     setBotStatus(name, status) {
@@ -71,6 +90,24 @@ const bots = {
         //console.log(b)
         if (b === -1) return
         b.status = status;
+    },
+    setBotReloadCD(name, cd=10_000) {
+        let b = this.getBot(name)
+        //console.log(b)
+        if (b === -1) return
+        b.reloadCD = cd;
+    },
+    /**
+     * 用於設定crtType
+     * @param {*} name 
+     * @param {*} type 
+     * @returns 
+     */
+    setBotCrtType(name, crtType) {
+        let b = this.getBot(name)
+        //console.log(b)
+        if (b === -1) return
+        b.crtType = crtType;
     },
     async getBotInfo(index) {
         let crt;
@@ -134,7 +171,7 @@ const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer: (line) => {
-        const completions = ['.switch', '.exit', '.close', '.test', '.reload', '.ff'];
+        const completions = ['.switch', '.exit', '.close', '.reload', '.ff', '.eval','.test',];
         const hits = completions.filter((c) => c.startsWith(line));
         return [hits.length ? hits : completions, line];
     },
@@ -158,8 +195,9 @@ rl.on('line', async (input) => {
                     return a.length > longest ? a.length : longest;
                 }, 0);
                 console.log(`目前共 ${bots.name.length} 隻bot`)
+                console.log((`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status|Type   |CrtType')
                 for (i in bots.name) {
-                    console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${bots.bots[i].status}`)
+                    console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${(bots.bots[i].status).toString().padEnd(6, ' ')} ${bots.bots[i].type ? (bots.bots[i].type).padEnd(7, ' ') : '-'.padEnd(7, ' ')} ${bots.bots[i].crtType ? bots.bots[i].crtType.padEnd(7, ' ') : '-'.padEnd(7, ' ')}`)
                 }
                 break;
             case 'exit':
@@ -167,6 +205,8 @@ rl.on('line', async (input) => {
                     console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
                 } else {
                     cs.c.send({ type: "exit", });
+                    currentSelect = -1;
+                    process.title = '[Bot][-1] type .switch to select a bot';
                 }
                 break;
             case 'reload':
@@ -177,33 +217,17 @@ rl.on('line', async (input) => {
                 }
                 break;
             case 'test':
-
-                client.api.interactions(rlargs[0]).get().then(interaction => {
-                    // do something with the interaction
-                    console.log(interaction);
-                }).catch(error => {
-                    // handle error
-                    console.error(error);
-                });
-
-                // const channel2 = await client.channels.cache.get(config.discord_setting.channelId);
-                // if (channel2) {
-                //     const message = await channel2.messages.fetch(rlargs[0], { force: true }).catch(console.error);
-                //     if (message) {
-                //         console.log('Message still exists!');
-                //     } else {
-                //         console.log('Message does not exist!');
-                //     }
-                // }
-                myLog(rlargs);
+                logToFileAndConsole(rlargs);
                 break;
             case 'switch':
                 let tmp = parseInt(rlargs[0], 10);
-                if (tmp > bots.name.length) {
+                if (tmp > bots.name.length&&tmp == undefined) {
                     console.log("index err")
                     return
                 }
                 currentSelect = tmp;
+                process.title = `[Bot][${rlargs[0]} ${bots.getBot(tmp).name}] type .switch to select a bot`
+                console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
                 break;
             default:
                 console.log(`unknown command '${rlCommandName.substring(1)}'`);
@@ -226,8 +250,8 @@ client.on('ready', async () => {
     console.log(`Discord bot Logged in as ${client.user.tag}`);
     client.user.setPresence({
         activities: [{
-            name: '123',
-            type: 3,
+            name: 'Minecraft',
+            type: 1,
             url: 'https://www.twitch.tv/nacho_dayo',
         }],
         status: 'online',
@@ -279,6 +303,10 @@ client.on('interactionCreate', async (interaction) => {
         return
     }
     console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+    if(!discordWhiteListCheck(interaction.member)){
+        await noPermission(interaction);
+        return
+    }
     if (interaction.isButton()) {
         switch (interaction.customId) {
             case 'botmenu-refresh-btn':
@@ -325,23 +353,27 @@ client.on('interactionCreate', async (interaction) => {
             //  console.log(bots.getBot(targetBot))
             //need check status here
             botinfo = await bots.getBotInfo(targetBot)
-            interaction.reply(generateBotControlMenu(botinfo))
+            interaction.reply(generateGeneralBotControlMenu(botinfo))
         } else await notImplemented(interaction);
     } else {
         await notImplemented(interaction);
     }
 
 });
-//botcontrolmenu handler
+//generalbotcontrolmenu handler
 client.on('interactionCreate', async (interaction) => {
     //  console.log(interaction)
-    if (!interaction.customId.startsWith('botcontrolmenu')) {
+    if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
         return
     }
     console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+    if(!discordWhiteListCheck(interaction.member)){
+        await noPermission(interaction);
+        return
+    }
     if (interaction.isButton()) {
         switch (interaction.customId) {
-            case 'botcontrolmenu-close-btn':
+            case 'generalbotcontrolmenu-close-btn':
                 await interaction.message.delete();
                 break;
             default:
@@ -372,8 +404,8 @@ main()
 function main() {
     console.log(config.account.id)
     currentSelect = 0;
-    process.title = 'Test-bot 0 - are in service';
-    let tmp = 5;
+    process.title = '[Bot][-1] type .switch to select a bot';
+    let timerdelay = 5;
     //get type  and set of all bot
     // type: auto raid general
     for (i in config.account) {
@@ -383,9 +415,11 @@ function main() {
         setTimeout(() => {
             //console.log(i)
             //console.log(config.account.id[i])
-            createGeneralBot(config.account.id[i]);
-            tmp += 200;
-        }, tmp);
+            //createBot(config.account.id[i])
+            initBot(config.account.id[i]);
+            //createGeneralBot(config.account.id[i]);
+            timerdelay += 200;
+        }, timerdelay);
     }
 }
 async function handleClose() {
@@ -405,8 +439,60 @@ async function handleClose() {
     client.destroy();
     process.exit(0);
 }
-function createGeneralBot(name) {
-    const child = fork(path.join(__dirname, 'generalbot.js'), [name]);
+function initBot(name) {
+    bots.setBot(name, undefined);
+    if (!profiles[name]) {
+        bots.setBotStatus(name, 1000)
+        return
+    }
+    if (!profiles[name].type) {
+        bots.setBotStatus(name, 1001)
+        return
+    }
+    let debug = profiles[name].debug ? true : false;
+    switch (profiles[name].type) {
+        case 'general':
+            bots.setBot(name, undefined, 'general', 'general',debug);
+            break;
+        case 'raid':
+            bots.setBot(name, undefined, 'raid', 'raid',debug);
+            break;
+        case 'auto':
+            bots.setBot(name, undefined, 'auto', 'general',debug);
+            break;
+        default:
+            console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
+            break;
+    }
+    createBot(name);
+}
+/**
+ * create Bot with the crtType
+ * @param {*} name 
+ * @returns 
+ */
+function createBot(name) {
+    let bot = bots.getBot(name)
+    let botFile;
+    if (bot === -1) {
+        console.log(`bot ${name} not init...`)
+        return;
+    }
+    switch (bot.crtType) {
+        case 'general':
+            botFile = 'generalbot.js';
+            break;
+        case 'raid':
+            botFile = 'raidbot.js';
+            break;
+        default:
+            console.log(`Invaild crtType: ${bot.crtType}\nunable to create... ${name}`)
+            return
+            break;
+    }
+    let args = [name, bot.type]
+    if(bot.debug) args.push("--debug")
+    const child = fork(path.join(__dirname, botFile),args);
     bots.setBot(name, child);
     child.on('error', e => {
         console.log(`Error from ${name}:\n${e}`)
@@ -418,20 +504,25 @@ function createGeneralBot(name) {
         else if (c >= 2000) {
             console.log(`bot  ${name} err code = ${c}`)
         } else {
-            console.log("bot will restart at 10 second")
+            console.log(`bot will restart at ${bot.reloadCD / 1000} second`)
             // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
-            setTimeout(() => { createGeneralBot(name) }, 10_000)
+            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : 10_000))
         }
     })
     child.on('message', m => {
         switch (m.type) {
-            case 'setCD':
-                restartcd = m.value
+            case 'setReloadCD':
+                bots.setBotReloadCD(name, m.value)
                 break
             case 'setStatus':
                 //console.log('setStatus')
                 //console.log(m)
                 bots.setBotStatus(name, m.value)
+                break
+            case 'setCrtType':
+                //console.log('setStatus')
+                //console.log(m)
+                bots.setBotCrtType(name, m.value)
                 break
             case 'dataToParent':
                 //console.log('setStatus')
@@ -440,6 +531,7 @@ function createGeneralBot(name) {
                 break
         }
     })
+
 }
 async function getChannelMsgFetch(channel, id) {
     let oldmenu;
@@ -559,15 +651,15 @@ function generateBotMenuEmbed() {
         .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
-function generateBotControlMenu(botinfo) {
-    const embed = generateBotControlMenuEmbed(botinfo);
+function generateGeneralBotControlMenu(botinfo) {
+    const embed = generateGeneralBotControlMenuEmbed(botinfo);
     const row1 = new MessageActionRow().addComponents(
         // new MessageButton()
         //   .setCustomId('ping-btn')
         //   .setLabel('Ping')
         //   .setStyle('PRIMARY'),
         new MessageButton()
-            .setCustomId('botcontrolmenu-time-btn')
+            .setCustomId('generalbotcontrolmenu-time-btn')
             .setLabel('Current Time')
             .setStyle('PRIMARY'),
         // new MessageButton()
@@ -575,16 +667,16 @@ function generateBotControlMenu(botinfo) {
         //   .setLabel('New Button')
         //   .setStyle('PRIMARY'),
         new MessageButton()
-            .setCustomId('botcontrolmenu-newest-btn')
+            .setCustomId('generalbotcontrolmenu-newest-btn')
             .setLabel('下移')
             .setStyle('SECONDARY'),
         new MessageButton()
-            .setCustomId('botcontrolmenu-refresh-btn')
+            .setCustomId('generalbotcontrolmenu-refresh-btn')
             .setLabel('Refresh')
             .setStyle('SUCCESS')
             .setEmoji('♻️'),
         new MessageButton()
-            .setCustomId('botcontrolmenu-close-btn')
+            .setCustomId('generalbotcontrolmenu-close-btn')
             .setLabel('Close Panel')
             .setStyle('DANGER')
             .setEmoji('⚪')
@@ -592,7 +684,7 @@ function generateBotControlMenu(botinfo) {
     );
     const row2 = new MessageActionRow().addComponents(
         new MessageSelectMenu()
-            .setCustomId('botcontrolmenu-select')
+            .setCustomId('generalbotcontrolmenu-select')
             .setPlaceholder('Select an option')
             .setMinValues(1)
             .setMaxValues(1)
@@ -600,50 +692,50 @@ function generateBotControlMenu(botinfo) {
                 {
                     label: '基礎操作',
                     description: 'Open menu of Basic operations',
-                    value: 'botcontrolmenu-basic-operations-menu',
+                    value: 'generalbotcontrolmenu-basic-operations-menu',
                     emoji: '🛠️',
                 },
                 {
                     label: '地圖畫功能',
                     description: 'Open menu of mapart',
-                    value: 'botcontrolmenu-mapart-menu',
+                    value: 'generalbotcontrolmenu-mapart-menu',
                     emoji: '🗺️',
                 },
                 {
                     label: '倉庫管理功能',
                     description: 'Open menu of warehouse manager system',
-                    value: 'botcontrolmenu-wms-menu',
+                    value: 'generalbotcontrolmenu-wms-menu',
                     emoji: '🏬',
                 },
                 {
                     label: 'Ping',
                     description: 'This is option 1',
-                    value: 'botcontrolmenu-ping',
+                    value: 'generalbotcontrolmenu-ping',
                     emoji: '🔥',
                 },
                 {
                     label: 'Current Time',
                     description: 'Show Current Time',
-                    value: 'botcontrolmenu-time',
+                    value: 'generalbotcontrolmenu-time',
                     emoji: '🔥',
                 },
                 {
                     label: 'New Button',
                     description: 'Create message with button',
-                    value: 'botcontrolmenu-button',
+                    value: 'generalbotcontrolmenu-button',
                     emoji: '🔥',
                 },
                 {
                     label: 'Permissions',
                     description: 'not implement yet',
-                    value: 'botcontrolmenu-permission-menu',
+                    value: 'generalbotcontrolmenu-permission-menu',
                     emoji: '🔥',
                 },
             ])
     );
     return { content: `Control Panel for bot - ${botinfo.id}`, embeds: [embed], components: [row1, row2] };
 }
-function generateBotControlMenuEmbed(botinfo) {
+function generateGeneralBotControlMenuEmbed(botinfo) {
     const author = {
         name: botinfo.name,
         iconURL: botinfo.avatar,
@@ -680,16 +772,24 @@ function generateBotControlMenuEmbed(botinfo) {
     return embed;
 }
 function discordWhiteListCheck(member) {
+    //console.log(member)
     // Check if the member is in the whitelist members
     if (config.discord_setting.whitelist_members.includes(member.id)) {
         return true;
     }
+    //console.log(mm)
     // Check if the member has a whitelist role
     if (member.roles.cache.some(role => config.discord_setting.whitelist_roles.includes(role.id))) {
         return true;
     }
     // Member is not in whitelist
     return false;
+}
+async function noPermission(interaction) {
+    await interaction.reply({
+        content: `You don't have permission to do this`,
+        ephemeral: true
+    })
 }
 async function notImplemented(interaction) {
     await interaction.reply({
@@ -716,6 +816,7 @@ const botstatus = {
     2: 'in tasking',
     3: 'raid',
     1000: 'Closed(Profile Not Found)',
+    1001: 'Closed(Type Not Found)',
     //  Raid 區
     2000: 'raid - closed', //unused
     2001: 'Restarting',

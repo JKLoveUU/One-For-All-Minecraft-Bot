@@ -14,11 +14,13 @@
   },
   "files": [
     "index.js",
-    "generalbot.js"
+    "generalbot.js",
+    "./lib"
   ],
   "pkg": {
     "assets": [
-      "generalbot.js"
+      "generalbot.js",
+      "lib/**"
     ]
   },
   "author": "JKLove",
