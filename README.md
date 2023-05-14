@@ -4,16 +4,14 @@ minecraft bot for mcfallout server
 # ???
 
 * 目前實現功能
-    * 無
-* Goal
+    * Discord
+        1. ~~轉交給 CMD Console
+        2. 控制 & 轉發
+        3. ~~顯示狀態~~
     * Agent
         1. 任務排程
         2. 定期重啟
         3. 異常檢測
-    * Discord
-        1. 轉交給 CMD Console
-        2. 控制 & 轉發
-        3. 顯示狀態
     * DM Control
         1. 轉交給 CMD Console
         2. 限制發消息速度

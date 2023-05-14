@@ -6,12 +6,43 @@ let debug = process.argv.includes("--debug");
 let login = false
 const EventEmitter = require('events');
 const mineflayer = require("mineflayer");
+const sd = require('silly-datetime');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const profiles = require(`${process.cwd()}/profiles.json`);
 const fs = require('fs');
 const fsp = require('fs').promises
 const { version } = require("os");
 const data = require('toml-require');
+function logger(logToFile = false, type = "INFO", ...args) {
+    if (logToFile) {
+        process.send({ type: 'logToFile', value: { type: type, msg: args.join(' ') } })
+        return
+    }
+    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
+    let colortype
+    switch (type) {
+        case "DEBUG":
+            colortype = "\x1b[32m" + type + "\x1b[0m";
+            break;
+        case "INFO":
+            colortype = "\x1b[32m" + type + "\x1b[0m";
+            break;
+        case "WARN":
+            colortype = "\x1b[33m" + type + "\x1b[0m";
+            break;
+        case "ERROR":
+            type = "\x1b[31m" + type + "\x1b[0m";
+            colortype;
+        case "CHAT":
+            colortype = "\x1b[93m" + type + "\x1b[0m";
+            break;
+        default:
+            colortype = type;
+            break;
+    }
+    console.log(`[${fmtTime}][${colortype}][${process.argv[2]}] ${args.join(' ')}`);
+}
+
 process.send({ type: 'setReloadCD', value: 10_000 })
 //lib
 const mapart = require(`./lib/mapart`);
@@ -43,7 +74,7 @@ const bot = (() => { // createMcBot
     })
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
-        console.log(`${process.argv[2]} login as ${bot.username}`)
+        logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
         taskManager.init()
         process.send({ type: 'setStatus', value: 3200 })
         bot.chatAddPattern(
@@ -65,6 +96,10 @@ const bot = (() => { // createMcBot
         login = true
     })
     bot.on('message', async (jsonMsg) => {
+        if (debug) {
+            logger(false, 'CHAT', jsonMsg.toAnsi())
+        }
+
         //console.log(jsonMsg.toString())
         //let time = new Date();
     })
@@ -72,18 +107,17 @@ const bot = (() => { // createMcBot
         // let abc = jsonMsg.toMotd()
         // console.log(abc)
         let args = jsonMsg.toString().split(' ')
-        //console.log(args)
         let playerID = args[0].slice(1, args[0].length);
-        //console.log(playerID)
         let cmds = args.slice(3, args.length);
         let isTask = taskManager.isTask(cmds)
         if (isTask.vaild) {
             let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
-            taskManager.assign(tk,isTask.longRunning)
+            taskManager.assign(tk, isTask.longRunning)
             // console.log(taskManager.isImm(cmds))
 
         }
-        console.log(jsonMsg.toString())
+        //console.log(jsonMsg.toString())
+        logger(true, 'CHAT', jsonMsg.toString())
     })
     bot.on('tpa', p => {
         bot.chat(true ? '/tpaccept' : '/tpdeny')
@@ -105,24 +139,32 @@ const bot = (() => { // createMcBot
     })
     //---------------
     bot.on('error', async (error) => {
-        console.log("err " + error)
-        console.log('err code ' + error.code)
+        console.log('[ERROR]name:\n' + error.name)
+        console.log('[ERROR]msg:\n' + error.message)
+        console.log('[ERROR]code:\n' + error.code)
+        if (error?.message?.includes('RateLimiter disallowed request')) {
+            process.send({ type: 'setReloadCD', value: 60_000 })
+            await kill(1900)
+        } else if (error?.message?.includes('Failed to obtain profile data for')) {
+            await kill(1901)
+        }
+        logger(true, 'ERROR', error);
         await kill(1000)
     })
-    bot.on('kick', async (reason) => {
-        console.log("kick reason " + reason)
+    bot.on('kicked', async (reason) => {
+        logger(true, 'WARN', `kick reason ${reason}`)
         await kill(1000)
     })
     bot.on('death', () => {
-        console.log(`Death at ${new Date()}`);
+        logger(true, 'INFO', `Death at ${new Date()}`)
     })
     bot.once('end', async () => {
-        console.log(`${process.argv[2]} disconnect at ${new Date()}`)
+        logger(true, 'WARN', `${process.argv[2]} disconnect`)
         await kill(1000)
     })
     bot.once('wait', async () => {
         process.send({ type: 'setReloadCD', value: 120_000 })
-        console.log(`${process.argv[2]} send to wait ${new Date()}`)
+        logger(true, 'INFO', `send to wait`)
         await kill(1001)
     })
     //init()
@@ -132,7 +174,7 @@ const bot = (() => { // createMcBot
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
     console.log(`exiting in status ${code}`)
-    if(login) await taskManager.save();
+    if (login) await taskManager.save();
     bot.end()
     process.exit(code)
 }
@@ -183,9 +225,9 @@ const taskManager = {
             this.tasks = tt.tasks
             this.err_tasks = tt.err_tasks
         }
-        console.log(`task init complete / ${this.tasks.length} tasks now`)
+        //console.log(`task init complete / ${this.tasks.length} tasks now`)
         //自動執行
-        if (this.tasks.length!=0&&!this.tasking) await this.loop()
+        if (this.tasks.length != 0 && !this.tasking) await this.loop()
     },
     isTask(args) {
         // {
@@ -200,7 +242,7 @@ const taskManager = {
                 break;
             default:
                 result = {
-                    vaild: true,
+                    vaild: false,
                 }
                 break;
         }
@@ -290,12 +332,3 @@ process.on('message', async (message) => {
             console.log('message from parent:', message);
     }
 });
-const commands = {
-    'say': { 'imm': true },
-    'info': { 'imm': true },
-    'mp': { 'group': 'mapart_g' },
-    'mapart': { 'group': 'mapart_g' },
-    'mapart_g': {
-        'info': { 'imm': true },
-    }
-};

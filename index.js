@@ -2,7 +2,7 @@ const path = require('path');
 const readline = require('readline');
 const { fork } = require('child_process');
 const fs = require('fs');
-
+const sd = require('silly-datetime');
 // mc
 const rqgeneral = require(`./generalbot.js`)
 //const rqgeneral = fork(path.join(__dirname, 'generalbot.js'));
@@ -36,12 +36,33 @@ if (!fs.existsSync('logs')) {
 }
 //const logFilePath = path.join(logsDir, "lastest" + ".log");
 const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
-function logToFileAndConsole(...args) {
-    const prefix = '[LOG]';
-    const message = `[${new Date()}] ${prefix} ${args.join(' ')}\n`;
-    logFile.write(message);
+function logToFileAndConsole(p = "CONSOLE", type = "INFO", ...args) {
+    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
+    let colortype
+    switch (type) {
+        case "DEBUG":
+            colortype = "\x1b[32m"+type+"\x1b[0m";
+            break;
+        case "INFO":
+            colortype = "\x1b[32m"+type+"\x1b[0m";
+            break;
+        case "WARN":
+            colortype = "\x1b[33m"+type+"\x1b[0m";
+            break;
+        case "ERROR":
+            type = "\x1b[31m"+type+"\x1b[0m";
+            colortype;
+        case "CHAT":
+            colortype = "\x1b[93m"+type+"\x1b[0m";
+            break;
+        default:
+            colortype = type;
+            break;
+    }
+    logFile.write(`[${fmtTime}][${type}][${p}] ${args.join(' ')}\n`);
+    console.log(`[${fmtTime}][${colortype}][${p}] ${args.join(' ')}`);
 }
-logToFileAndConsole(`Bot Start at ${new Date().toString()}`);
+
 const dataManager = {
 }
 const bots = {
@@ -62,7 +83,7 @@ const bots = {
         if (index >= this.name.length) return -1
         return this.bots[index]
     },
-    setBot(name, child, type = null, crtType = null,debug) {
+    setBot(name, child, type = null, crtType = null, debug) {
         if (this.name.indexOf(name) === -1) {
             this.name.push(name)
             this.bots.push(
@@ -74,7 +95,7 @@ const bots = {
                     type: type,
                     crtType: crtType,
                     reloadCD: 10_000,
-                    debug: debug ? true:false,
+                    debug: debug ? true : false,
                 }
             )
         } else {
@@ -91,7 +112,7 @@ const bots = {
         if (b === -1) return
         b.status = status;
     },
-    setBotReloadCD(name, cd=10_000) {
+    setBotReloadCD(name, cd = 10_000) {
         let b = this.getBot(name)
         //console.log(b)
         if (b === -1) return
@@ -171,7 +192,7 @@ const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer: (line) => {
-        const completions = ['.switch', '.exit', '.close', '.reload', '.ff', '.eval','.test',];
+        const completions = ['.switch', '.list','.exit', '.close', '.reload', '.ff', '.eval', '.test',];
         const hits = completions.filter((c) => c.startsWith(line));
         return [hits.length ? hits : completions, line];
     },
@@ -185,7 +206,7 @@ rl.on('line', async (input) => {
         // console.log(`收到指令 ${rlCommandName}`)
         switch (rlCommandName.substring(1)) {
             case 'ff':    //debug
-                process.exit()
+                process.exit(0)
                 break;
             case 'eval':    //debug
                 eval(input.substring(6))
@@ -217,11 +238,11 @@ rl.on('line', async (input) => {
                 }
                 break;
             case 'test':
-                logToFileAndConsole(rlargs);
+                logToFileAndConsole("CONSOLE", "INFO", rlargs);
                 break;
             case 'switch':
                 let tmp = parseInt(rlargs[0], 10);
-                if (tmp > bots.name.length&&tmp == undefined) {
+                if (tmp > bots.name.length && tmp == undefined) {
                     console.log("index err")
                     return
                 }
@@ -247,7 +268,7 @@ rl.on('close', async () => {
     await handleClose()
 });
 client.on('ready', async () => {
-    console.log(`Discord bot Logged in as ${client.user.tag}`);
+    logToFileAndConsole("CONSOLE", "INFO", `Discord bot Logged in as ${client.user.tag}`);
     client.user.setPresence({
         activities: [{
             name: 'Minecraft',
@@ -280,7 +301,7 @@ client.on('ready', async () => {
         }
     });
     channel.bulkDelete(botMenuIds)
-        .then(deletedMessages => console.log(`Deleted ${deletedMessages.size} expired Menu`))
+        .then(deletedMessages => logToFileAndConsole("CONSOLE", "INFO", `Deleted ${deletedMessages.size} expired Menu`))
         .catch(console.error);
     let newbotMenuId = await channel.send(generateBotMenu());
     botMenuId = newbotMenuId.id
@@ -303,7 +324,7 @@ client.on('interactionCreate', async (interaction) => {
         return
     }
     console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
-    if(!discordWhiteListCheck(interaction.member)){
+    if (!discordWhiteListCheck(interaction.member)) {
         await noPermission(interaction);
         return
     }
@@ -367,7 +388,7 @@ client.on('interactionCreate', async (interaction) => {
         return
     }
     console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
-    if(!discordWhiteListCheck(interaction.member)){
+    if (!discordWhiteListCheck(interaction.member)) {
         await noPermission(interaction);
         return
     }
@@ -398,6 +419,7 @@ process.on('uncaughtException', err => {
 process.on('SIGINT', handleClose);
 process.on('SIGTERM', handleClose);
 console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
+logToFileAndConsole("CONSOLE", "INFO", `Bot Start`);
 
 client.login(config.discord_setting.token)
 main()
@@ -452,13 +474,13 @@ function initBot(name) {
     let debug = profiles[name].debug ? true : false;
     switch (profiles[name].type) {
         case 'general':
-            bots.setBot(name, undefined, 'general', 'general',debug);
+            bots.setBot(name, undefined, 'general', 'general', debug);
             break;
         case 'raid':
-            bots.setBot(name, undefined, 'raid', 'raid',debug);
+            bots.setBot(name, undefined, 'raid', 'raid', debug);
             break;
         case 'auto':
-            bots.setBot(name, undefined, 'auto', 'general',debug);
+            bots.setBot(name, undefined, 'auto', 'general', debug);
             break;
         default:
             console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
@@ -491,8 +513,8 @@ function createBot(name) {
             break;
     }
     let args = [name, bot.type]
-    if(bot.debug) args.push("--debug")
-    const child = fork(path.join(__dirname, botFile),args);
+    if (bot.debug) args.push("--debug")
+    const child = fork(path.join(__dirname, botFile), args);
     bots.setBot(name, child);
     child.on('error', e => {
         console.log(`Error from ${name}:\n${e}`)
@@ -511,6 +533,9 @@ function createBot(name) {
     })
     child.on('message', m => {
         switch (m.type) {
+            case 'logToFile':
+                logToFileAndConsole(name,m.value.type,m.value.msg)
+                break
             case 'setReloadCD':
                 bots.setBotReloadCD(name, m.value)
                 break
@@ -805,6 +830,8 @@ const exitcode = {
     1001: 'server reload',
     1002: 'client reload',
     1003: 'client error reload',
+    1900: 'RateLimiter disallowed request',
+    1901: 'Failed to obtain profile data',
     //  不可重啟類
     2001: 'config not found',
     2002: 'config err',
