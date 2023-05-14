@@ -13,6 +13,7 @@ const fs = require('fs');
 const fsp = require('fs').promises
 const { version } = require("os");
 const data = require('toml-require');
+const CNTA = require('chinese-numbers-to-arabic');
 function logger(logToFile = false, type = "INFO", ...args) {
     if (logToFile) {
         process.send({ type: 'logToFile', value: { type: type, msg: args.join(' ') } })
@@ -46,6 +47,7 @@ function logger(logToFile = false, type = "INFO", ...args) {
 process.send({ type: 'setReloadCD', value: 10_000 })
 //lib
 const mapart = require(`./lib/mapart`);
+const craftAndExchange = require(`./lib/craftAndExchange`);
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
@@ -75,7 +77,9 @@ const bot = (() => { // createMcBot
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
-        taskManager.init()
+        taskManager.init();
+        await mapart.init(process.argv[2], process.argv[2], logger);
+        await craftAndExchange.init(bot, process.argv[2], logger);
         process.send({ type: 'setStatus', value: 3200 })
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
@@ -126,28 +130,21 @@ const bot = (() => { // createMcBot
         bot.chat(true ? '/tpaccept' : '/tpdeny')
     })
     bot._client.on('playerlist_header', () => {
-        update = false
-        const header = bot.tablist.header.extra
-        if (!header) return
-        const server = header[header.length - 17]?.text
-        if (!server?.startsWith('分流')) return
-        { botinfo.serverCH = server; update = true; }
-        if (header[header.length - 29]?.text !== '낸') return
-        const bal = parseFloat(header[header.length - 28]?.text.replace(/,/g, ''));
-        if (true || (bal >= 0 && grinde.bal - bal !== 1728 && grinde.bal !== bal)) { botinfo.balance = bal; update = true; }
-        if (update == true) botinfo.tabUpdateTime = new Date();
+        botTabhandler(bot.tablist)
     })
     //---------------
     bot.on('error', async (error) => {
-        console.log('[ERROR]name:\n' + error.name)
-        console.log('[ERROR]msg:\n' + error.message)
-        console.log('[ERROR]code:\n' + error.code)
         if (error?.message?.includes('RateLimiter disallowed request')) {
             process.send({ type: 'setReloadCD', value: 60_000 })
             await kill(1900)
         } else if (error?.message?.includes('Failed to obtain profile data for')) {
             await kill(1901)
+        } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
+            await kill(1902)
         }
+        console.log('[ERROR]name:\n' + error.name)
+        console.log('[ERROR]msg:\n' + error.message)
+        console.log('[ERROR]code:\n' + error.code)
         logger(true, 'ERROR', error);
         await kill(1000)
     })
@@ -173,7 +170,7 @@ const bot = (() => { // createMcBot
 
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
-    console.log(`exiting in status ${code}`)
+    logger(true, 'WARN', `exiting in status ${code}`)
     if (login) await taskManager.save();
     bot.end()
     process.exit(code)
@@ -190,6 +187,17 @@ class Task {
     //DC
     discordUser = null;
     //Console
+    /**
+     * 
+     * @param {*} priority 
+     * @param {*} displayName 
+     * @param {string} source AcceptSource: console, minecraft-dm, discord
+     * @param {string[]} content 
+     * @param {Date} timestamp 
+     * @param {boolean} sendNotification 
+     * @param {string | null} minecraftUser 
+     * @param {string | null} discordUser 
+     */
     constructor(priority = 10, displayName = '未命名', source = '', content = '', timestamp = Date.now(), sendNotification = true, minecraftUser = '', discordUser = null) {
         this.priority = priority;
         this.displayName = displayName;
@@ -240,6 +248,17 @@ const taskManager = {
             case mapart.identifier.includes(args[0]):
                 result = mapart.parseCMD(args)
                 break;
+            case craftAndExchange.identifier.includes(args[0]):
+                result = craftAndExchange.parseCMD(args)
+                break;
+            case args[0] === 'info':
+            case args[0] === 'i':
+                result = {
+                    vaild: true,             
+                    longRunning: false,
+                    permissionRequre: 0,     //reserved        
+                }
+                break;
             default:
                 result = {
                     vaild: false,
@@ -252,9 +271,17 @@ const taskManager = {
     async execute(task) {
         console.log("執行task")
         console.log(task)
+        if (task.source == 'console') task.console = logger;
         switch (true) {
             case mapart.identifier.includes(task.content[0]):
-                await mapart.executeCMD(task.content)
+                await mapart.executeCMD(bot, task)
+                break;
+            case craftAndExchange.identifier.includes(task.content[0]):
+                await craftAndExchange.executeCMD(bot, task)
+                break;
+            case task.content[0] === 'info':
+            case task.content[0] === 'i':
+                await bot_cmd_info();
                 break;
             default:
                 break;
@@ -294,6 +321,49 @@ const taskManager = {
     //     this.eventl.emit('commit', task);
     // },
 }
+async function bot_cmd_info(){
+    
+}
+function botTabhandler(tab) {
+    const header = tab.header.extra
+    if (!header) return
+    let si = false, ci = false, bi = false
+    let serverIdentifier = -1;
+    let coinIdentifier = -1;
+    let balanceIdentifier = -1;
+    for (i in header) {
+        if (header[i].text == '所處位置 ') {            //+2
+            serverIdentifier = parseInt(i);            // 不知道為啥之前用parseInt
+        } else if (header[i].text == '村民錠餘額') {    //+2
+            coinIdentifier = parseInt(i);
+        } else if (header[i].text == '綠寶石餘額') {    //+3
+            balanceIdentifier = parseInt(i);
+        }
+    } 
+    if (serverIdentifier != -1 && header[serverIdentifier + 2]?.text?.startsWith('分流')) {
+        botinfo.serverCH = header[serverIdentifier + 2].text
+        let serverCH = header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length);
+        let s = -1;
+        try {
+            s = CNTA.toInteger(serverCH);
+        } catch (e) {
+            //return -1;
+        }
+        botinfo.server = s
+        si = true;
+    }
+    if (coinIdentifier != -1) {
+        coin = parseInt(header[coinIdentifier + 2]?.text.replace(/,/g, ''));
+        botinfo.coin = coin
+        ci = true
+    }
+    if (balanceIdentifier != -1) {
+        bal = parseFloat(header[balanceIdentifier + 3]?.text.replace(/,/g, ''));
+        botinfo.balance = bal
+        bi = true;
+    }
+    if (si && ci && bi) botinfo.tabUpdateTime = new Date();
+}
 async function readConfig(file) {
     var raw_file = await fsp.readFile(file);
     var com_file = await JSON.parse(raw_file);
@@ -314,6 +384,15 @@ process.on('message', async (message) => {
             process.send({ type: 'dataToParent', value: dataRequiredata })
             break;
         case 'cmd':
+            let args = message.text.slice(1).split(' ')
+            console.log(args)
+            let isTask = taskManager.isTask(args)
+            if (isTask.vaild) {
+                let tk = new Task(10, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
+                taskManager.assign(tk, isTask.longRunning)
+                // console.log(taskManager.isImm(cmds))
+
+            }
             //交給CommandManager
             break;
         case 'chat':

@@ -2,7 +2,14 @@
 minecraft bot for mcfallout server
 
 # ???
+# TODO
+    - Discord 各功能 介面
+    
+## Craft and Exchange
+* autoset 
+    - 輸出訊息未對應
 
+--- 
 * 目前實現功能
     * Discord
         1. ~~轉交給 CMD Console

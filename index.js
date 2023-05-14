@@ -251,7 +251,8 @@ rl.on('line', async (input) => {
                 console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
                 break;
             default:
-                console.log(`unknown command '${rlCommandName.substring(1)}'`);
+                cs.c.send({ type: "cmd", text: input });
+                //console.log(`unknown command '${rlCommandName.substring(1)}'`);
                 break;
         }
     } else {
@@ -832,6 +833,7 @@ const exitcode = {
     1003: 'client error reload',
     1900: 'RateLimiter disallowed request',
     1901: 'Failed to obtain profile data',
+    1902: 'FetchError: read ECONNRESET',
     //  不可重啟類
     2001: 'config not found',
     2002: 'config err',
