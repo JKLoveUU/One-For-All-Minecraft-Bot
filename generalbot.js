@@ -254,7 +254,7 @@ const taskManager = {
             case args[0] === 'info':
             case args[0] === 'i':
                 result = {
-                    vaild: true,             
+                    vaild: true,
                     longRunning: false,
                     permissionRequre: 0,     //reserved        
                 }
@@ -321,8 +321,8 @@ const taskManager = {
     //     this.eventl.emit('commit', task);
     // },
 }
-async function bot_cmd_info(){
-    
+async function bot_cmd_info() {
+
 }
 function botTabhandler(tab) {
     const header = tab.header.extra
@@ -339,7 +339,7 @@ function botTabhandler(tab) {
         } else if (header[i].text == '綠寶石餘額') {    //+3
             balanceIdentifier = parseInt(i);
         }
-    } 
+    }
     if (serverIdentifier != -1 && header[serverIdentifier + 2]?.text?.startsWith('分流')) {
         botinfo.serverCH = header[serverIdentifier + 2].text
         let serverCH = header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length);
@@ -354,13 +354,17 @@ function botTabhandler(tab) {
     }
     if (coinIdentifier != -1) {
         coin = parseInt(header[coinIdentifier + 2]?.text.replace(/,/g, ''));
-        botinfo.coin = coin
-        ci = true
+        if (coin != NaN) {
+            botinfo.coin = coin
+            ci = true
+        }
     }
     if (balanceIdentifier != -1) {
         bal = parseFloat(header[balanceIdentifier + 3]?.text.replace(/,/g, ''));
-        botinfo.balance = bal
-        bi = true;
+        if (bal != NaN) {
+            botinfo.balance = bal
+            bi = true;
+        }
     }
     if (si && ci && bi) botinfo.tabUpdateTime = new Date();
 }
