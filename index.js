@@ -50,8 +50,8 @@ function logToFileAndConsole(p = "CONSOLE", type = "INFO", ...args) {
             colortype = "\x1b[33m"+type+"\x1b[0m";
             break;
         case "ERROR":
-            type = "\x1b[31m"+type+"\x1b[0m";
-            colortype;
+            colortype = "\x1b[31m"+type+"\x1b[0m";
+            break;
         case "CHAT":
             colortype = "\x1b[93m"+type+"\x1b[0m";
             break;
@@ -320,6 +320,7 @@ client.on('ready', async () => {
 });
 //botmenu handler 
 client.on('interactionCreate', async (interaction) => {
+    if(interaction.isCommand()) return
     //  console.log(interaction)
     if (!interaction.customId.startsWith('botmenu')) {
         return
@@ -384,6 +385,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 //generalbotcontrolmenu handler
 client.on('interactionCreate', async (interaction) => {
+    if(interaction.isCommand()) return
     //  console.log(interaction)
     if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
         return
