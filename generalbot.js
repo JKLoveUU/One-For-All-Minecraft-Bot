@@ -246,10 +246,10 @@ const taskManager = {
         let result
         switch (true) {
             case mapart.identifier.includes(args[0]):
-                result = mapart.parseCMD(args)
+                result = mapart.parse(args)
                 break;
             case craftAndExchange.identifier.includes(args[0]):
-                result = craftAndExchange.parseCMD(args)
+                result = craftAndExchange.parse(args)
                 break;
             case args[0] === 'info':
             case args[0] === 'i':
@@ -274,10 +274,10 @@ const taskManager = {
         if (task.source == 'console') task.console = logger;
         switch (true) {
             case mapart.identifier.includes(task.content[0]):
-                await mapart.executeCMD(bot, task)
+                await mapart.execute(bot, task)
                 break;
             case craftAndExchange.identifier.includes(task.content[0]):
-                await craftAndExchange.executeCMD(bot, task)
+                await craftAndExchange.execute(bot, task)
                 break;
             case task.content[0] === 'info':
             case task.content[0] === 'i':
