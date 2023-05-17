@@ -4,6 +4,7 @@ if (!process.argv[2]) {
 }
 let debug = process.argv.includes("--debug");
 let login = false
+let config
 const EventEmitter = require('events');
 const mineflayer = require("mineflayer");
 const sd = require('silly-datetime');
@@ -77,8 +78,9 @@ const bot = (() => { // createMcBot
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
+        bot.taskManager = taskManager;
         taskManager.init();
-        await mapart.init(process.argv[2], process.argv[2], logger);
+        await mapart.init(bot, process.argv[2], logger);
         await craftAndExchange.init(bot, process.argv[2], logger);
         process.send({ type: 'setStatus', value: 3200 })
         bot.chatAddPattern(
@@ -114,6 +116,10 @@ const bot = (() => { // createMcBot
         let playerID = args[0].slice(1, args[0].length);
         let cmds = args.slice(3, args.length);
         let isTask = taskManager.isTask(cmds)
+        if(!config.setting.whitelist.includes(playerID)){
+            logger(true, 'CHAT', jsonMsg.toString())
+            return
+        }
         if (isTask.vaild) {
             let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
             taskManager.assign(tk, isTask.longRunning)
@@ -124,10 +130,12 @@ const bot = (() => { // createMcBot
         logger(true, 'CHAT', jsonMsg.toString())
     })
     bot.on('tpa', p => {
-        bot.chat(true ? '/tpaccept' : '/tpdeny')
+        bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p)?"Accept":"Deny"} ${p}'s tpa request`);
     })
     bot.on('tpahere', p => {
-        bot.chat(true ? '/tpaccept' : '/tpdeny')
+        bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p)?"Accept":"Deny"} ${p}'s tpahere request`);
     })
     bot._client.on('playerlist_header', () => {
         botTabhandler(bot.tablist)
@@ -148,8 +156,8 @@ const bot = (() => { // createMcBot
         logger(true, 'ERROR', error);
         await kill(1000)
     })
-    bot.on('kicked', async (reason) => {
-        logger(true, 'WARN', `kick reason ${reason}`)
+    bot.on('kicked', async (reason,loggedIn) => {
+        logger(true, 'WARN', `${loggedIn}, kick reason ${reason}`)
         await kill(1000)
     })
     bot.on('death', () => {
@@ -235,7 +243,11 @@ const taskManager = {
         }
         //console.log(`task init complete / ${this.tasks.length} tasks now`)
         //自動執行
-        if (this.tasks.length != 0 && !this.tasking) await this.loop()
+        if (this.tasks.length != 0 && !this.tasking) {
+            logger(false,'INFO',`Found ${this.tasks.length} Task, will run at 3 second later.`)
+            await sleep(3000)
+            await this.loop()
+        }
     },
     isTask(args) {
         // {
@@ -373,8 +385,16 @@ async function readConfig(file) {
     var com_file = await JSON.parse(raw_file);
     return com_file;
 }
+process.on('uncaughtException', err => {
+    logger(true, 'ERROR', err);
+    console.log(err)
+    kill(1000)
+});
 process.on('message', async (message) => {
     switch (message.type) {
+        case 'init':
+            config = message.config;
+            break;
         case 'dataRequire':
             dataRequiredata = {
                 name: bot.username,

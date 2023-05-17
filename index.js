@@ -143,6 +143,8 @@ const bots = {
         } else {
             //console.log('data rqing ...')
             d = await this.getBotData(crt.name)
+            // TO-DO 這裡需要加上錯誤處理
+            //console.log(d)
             let botinfo = {
                 id: crt.name,
                 name: d.name,
@@ -415,6 +417,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 process.on('uncaughtException', err => {
+    logToFileAndConsole("CONSOLE", "INFO", err);
     console.log('Uncaught:\n', err)
     console.log('PID:', process.pid)
 });
@@ -522,6 +525,7 @@ function createBot(name) {
     child.on('error', e => {
         console.log(`Error from ${name}:\n${e}`)
     })
+    child.send({type: 'init',config: config})
     child.on('close', c => {
         child.removeAllListeners()
         bots.setBot(name, undefined)
