@@ -1,12 +1,14 @@
 {
-    "JKeqing":{
-      "username": "JKeqing",
-      "host": "mcfallout.net",
-      "port": ""
-    },
-    "JKLoveJK":{
-        "username": "JKLoveJK",
-        "host": "mcfallout.net",
-        "port": ""
-    }
+  "Example1": {
+    "username": "任意不重複Example1",
+    "host": "mcfallout.net",
+    "port": "",
+    "type": "general"
+  },
+  "Example2": {
+    "username": "任意不重複Example2",
+    "host": "mcfallout.net",
+    "port": "",
+    "type": "general"
   }
+}

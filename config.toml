@@ -1,0 +1,17 @@
+[discord_setting]       #dc設定皆用"字串"!!!
+  token = "-" #
+  owners= "123456789012345678"
+  appId = "123456789012345678"
+  guildId = "123456789012345678"
+  channelId=  "123456789012345678"
+  whitelist_members = ["123456789012345678"]
+  whitelist_roles = ["123456789012345678"]
+[account]
+  id = ["Example1","Example2"]   # 設定好後 要在 profiles.json 也設
+
+# old config
+
+[setting]
+  whitelist = ["JKLoveJK","XZeroTwoX","JKeqing"]
+
+
