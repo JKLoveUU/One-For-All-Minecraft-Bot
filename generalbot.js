@@ -13,7 +13,6 @@ const profiles = require(`${process.cwd()}/profiles.json`);
 const fs = require('fs');
 const fsp = require('fs').promises
 const { version } = require("os");
-const data = require('toml-require');
 const CNTA = require('chinese-numbers-to-arabic');
 function logger(logToFile = false, type = "INFO", ...args) {
     if (logToFile) {
@@ -45,7 +44,6 @@ function logger(logToFile = false, type = "INFO", ...args) {
     console.log(`[${fmtTime}][${colortype}][${process.argv[2]}] ${args.join(' ')}`);
 }
 
-process.send({ type: 'setReloadCD', value: 10_000 })
 //lib
 const mapart = require(`./lib/mapart`);
 const craftAndExchange = require(`./lib/craftAndExchange`);
@@ -59,6 +57,7 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
     fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
 }
+process.send({ type: 'setReloadCD', value: 10_000 })
 process.send({ type: 'setStatus', value: 3001 })
 const botinfo = {
     server: -1,
@@ -116,7 +115,7 @@ const bot = (() => { // createMcBot
         let playerID = args[0].slice(1, args[0].length);
         let cmds = args.slice(3, args.length);
         let isTask = taskManager.isTask(cmds)
-        if(!config.setting.whitelist.includes(playerID)){
+        if (!config.setting.whitelist.includes(playerID)) {
             logger(true, 'CHAT', jsonMsg.toString())
             return
         }
@@ -131,11 +130,11 @@ const bot = (() => { // createMcBot
     })
     bot.on('tpa', p => {
         bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', `${config.setting.whitelist.includes(p)?"Accept":"Deny"} ${p}'s tpa request`);
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpa request`);
     })
     bot.on('tpahere', p => {
         bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', `${config.setting.whitelist.includes(p)?"Accept":"Deny"} ${p}'s tpahere request`);
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpahere request`);
     })
     bot._client.on('playerlist_header', () => {
         botTabhandler(bot.tablist)
@@ -156,7 +155,7 @@ const bot = (() => { // createMcBot
         logger(true, 'ERROR', error);
         await kill(1000)
     })
-    bot.on('kicked', async (reason,loggedIn) => {
+    bot.on('kicked', async (reason, loggedIn) => {
         logger(true, 'WARN', `${loggedIn}, kick reason ${reason}`)
         await kill(1000)
     })
@@ -179,7 +178,6 @@ const bot = (() => { // createMcBot
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
     logger(true, 'WARN', `exiting in status ${code}`)
-    if (login) await taskManager.save();
     bot.end()
     process.exit(code)
 }
@@ -244,7 +242,7 @@ const taskManager = {
         //console.log(`task init complete / ${this.tasks.length} tasks now`)
         //自動執行
         if (this.tasks.length != 0 && !this.tasking) {
-            logger(false,'INFO',`Found ${this.tasks.length} Task, will run at 3 second later.`)
+            logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
             await sleep(3000)
             await this.loop()
         }
@@ -281,15 +279,16 @@ const taskManager = {
         //return false
     },
     async execute(task) {
-        console.log("執行task")
-        console.log(task)
+        logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
+        //console.log(task)
+        if (login) await this.save();
         if (task.source == 'console') task.console = logger;
         switch (true) {
             case mapart.identifier.includes(task.content[0]):
-                await mapart.execute(bot, task)
+                await mapart.execute(task)
                 break;
             case craftAndExchange.identifier.includes(task.content[0]):
-                await craftAndExchange.execute(bot, task)
+                await craftAndExchange.execute(task)
                 break;
             case task.content[0] === 'info':
             case task.content[0] === 'i':
@@ -298,6 +297,8 @@ const taskManager = {
             default:
                 break;
         }
+        logger(true, 'INFO', `task ${task.displayName} completed`)
+        if (login) await this.save();
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
