@@ -3,8 +3,9 @@ const readline = require('readline');
 const { fork } = require('child_process');
 const fs = require('fs');
 const sd = require('silly-datetime');
-// mc
-const rqgeneral = require(`./generalbot.js`)
+// mc 不知道為甚麼不require打包就會漏掉了
+const rq_general = require(`./generalbot.js`)
+const rq_raid = require(`./raidbot.js`)
 //const rqgeneral = fork(path.join(__dirname, 'generalbot.js'));
 //const mineflayer = require("mineflayer");
 //require(`${process.cwd()}/generalbot.js`)
@@ -34,33 +35,38 @@ const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 if (!fs.existsSync('logs')) {
     fs.mkdirSync('logs');
 }
+if (!fs.existsSync(`config/global`)) {
+    fs.mkdirSync(`config/global`, { recursive: true });
+}
 //const logFilePath = path.join(logsDir, "lastest" + ".log");
 const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
-function logToFileAndConsole(p = "CONSOLE", type = "INFO", ...args) {
-    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
-    let colortype
+function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
+    let arg = args.join(' ')
+    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')      //會太長嗎?
     switch (type) {
         case "DEBUG":
-            colortype = "\x1b[32m"+type+"\x1b[0m";
+            type = "\x1b[32m" + type + "\x1b[0m";
             break;
         case "INFO":
-            colortype = "\x1b[32m"+type+"\x1b[0m";
+            type = "\x1b[32m" + type + "\x1b[0m";
             break;
         case "WARN":
-            colortype = "\x1b[33m"+type+"\x1b[0m";
+            type = "\x1b[33m" + type + "\x1b[0m";
             break;
         case "ERROR":
-            colortype = "\x1b[31m"+type+"\x1b[0m";
+            type = "\x1b[31m" + type + "\x1b[0m";
             break;
         case "CHAT":
-            colortype = "\x1b[93m"+type+"\x1b[0m";
+            type = "\x1b[93m" + type + "\x1b[0m";
             break;
         default:
-            colortype = type;
+            type = type;
             break;
     }
-    logFile.write(`[${fmtTime}][${type}][${p}] ${args.join(' ')}\n`);
-    console.log(`[${fmtTime}][${colortype}][${p}] ${args.join(' ')}`);
+    let clog = `[${fmtTime}][${type}][${p}] ${arg}`;
+    let nclog = clog.replace(/\x1b\[\d+m/g, '');
+    console.log(clog);
+    logFile.write(nclog + "\n");
 }
 
 const dataManager = {
@@ -75,11 +81,13 @@ const bots = {
      * @return {botsInstance}
      */
     getBot(index) {
+       // logToFileAndConsole("DEBUG", "CONSOLE",`query the bot ${index}`);
         if (isNaN(index)) {
             let i = this.name.indexOf(index)
             if (i === -1) return -1
             return this.bots[i]
         }
+        if(index == -1) return -1;
         if (index >= this.name.length) return -1
         return this.bots[index]
     },
@@ -193,9 +201,23 @@ let currentSelect = -1;
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
+    // completer: (line) => {
+    //     const completions = ['.switch', '.list','.exit', '.close', '.reload', '.ff', '.eval', '.test',];
+    //     const hits = completions.filter((c) => c.startsWith(line));
+    //     return [hits.length ? hits : completions, line];
+    // },
     completer: (line) => {
-        const completions = ['.switch', '.list','.exit', '.close', '.reload', '.ff', '.eval', '.test',];
+        const completions = ['.switch', '.list', '.exit', '.close', '.reload', '.ff', '.eval', '.test', '.file'];
         const hits = completions.filter((c) => c.startsWith(line));
+        if (line.startsWith('.file ')) {
+            const dirPath = 'C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\t\\';
+            try {
+                const files = fs.readdirSync(dirPath);
+                return [files.map((f) => `.file ${f}`), line];
+            } catch (err) {
+                // Handle error
+            }
+        }
         return [hits.length ? hits : completions, line];
     },
 });
@@ -240,7 +262,7 @@ rl.on('line', async (input) => {
                 }
                 break;
             case 'test':
-                logToFileAndConsole("CONSOLE", "INFO", rlargs);
+                logToFileAndConsole("INFO", "CONSOLE", rlargs);
                 break;
             case 'switch':
                 let tmp = parseInt(rlargs[0], 10);
@@ -258,7 +280,7 @@ rl.on('line', async (input) => {
                 break;
         }
     } else {
-        if (cs == -1) {
+        if (cs == -1 || cs == undefined) {
             console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
         } else {
             cs.c.send({ type: "chat", text: input });
@@ -268,10 +290,14 @@ rl.on('line', async (input) => {
 });
 rl.on('close', async () => {
     //console.log('退出readLine');
+    // setTimeout(() => {
+    //     rl.prompt();
+    //     console.log("rl")
+    // }, 3000);
     await handleClose()
 });
 client.on('ready', async () => {
-    logToFileAndConsole("CONSOLE", "INFO", `Discord bot Logged in as ${client.user.tag}`);
+    logToFileAndConsole("INFO", "CONSOLE", `Discord bot Logged in as ${client.user.tag}`);
     client.user.setPresence({
         activities: [{
             name: 'Minecraft',
@@ -304,7 +330,7 @@ client.on('ready', async () => {
         }
     });
     channel.bulkDelete(botMenuIds)
-        .then(deletedMessages => logToFileAndConsole("CONSOLE", "INFO", `Deleted ${deletedMessages.size} expired Menu`))
+        .then(deletedMessages => logToFileAndConsole("INFO", "CONSOLE", `Deleted ${deletedMessages.size} expired Menu`))
         .catch(console.error);
     let newbotMenuId = await channel.send(generateBotMenu());
     botMenuId = newbotMenuId.id
@@ -315,6 +341,7 @@ client.on('ready', async () => {
         if (oldmenu) {
             await oldmenu.edit(generateBotMenu());
         } else {
+            console.log(oldmenu)
             let newbotMenuId = await channel.send(generateBotMenu());
             botMenuId = newbotMenuId.id
         }
@@ -322,7 +349,7 @@ client.on('ready', async () => {
 });
 //botmenu handler 
 client.on('interactionCreate', async (interaction) => {
-    if(interaction.isCommand()) return
+    if (interaction.isCommand()) return
     //  console.log(interaction)
     if (!interaction.customId.startsWith('botmenu')) {
         return
@@ -375,10 +402,34 @@ client.on('interactionCreate', async (interaction) => {
         if (customId === 'botmenu-select') {
             targetBot = values[0].slice(15)
             console.log(targetBot)
-            //  console.log(bots.getBot(targetBot))
+            let targetBotIns = bots.getBot(targetBot)
+            if(targetBotIns===-1){
+                console.log("err at open menu for bot",targetBot)
+                await interaction.reply({
+                    content: `err at open menu for bot ${targetBot}`,
+                    ephemeral: true
+                })
+                return
+            }
             //need check status here
-            botinfo = await bots.getBotInfo(targetBot)
-            interaction.reply(generateGeneralBotControlMenu(botinfo))
+            if(targetBotIns.status==2200){
+                await interaction.reply({
+                    content: 'Menu For Raid Not Implemented',
+                    ephemeral: true
+                })
+                return
+                let botinfo = await bots.getBotInfo(targetBot)
+                interaction.reply(generateRaidBotControlMenu(botinfo))
+            }else if(targetBotIns.status==3200){
+                let botinfo = await bots.getBotInfo(targetBot)
+                interaction.reply(generateGeneralBotControlMenu(botinfo))
+                return
+            }
+            await interaction.reply({
+                content: 'Bot is not running, try it later',
+                ephemeral: true
+            })
+
         } else await notImplemented(interaction);
     } else {
         await notImplemented(interaction);
@@ -387,7 +438,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 //generalbotcontrolmenu handler
 client.on('interactionCreate', async (interaction) => {
-    if(interaction.isCommand()) return
+    if (interaction.isCommand()) return
     //  console.log(interaction)
     if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
         return
@@ -417,21 +468,21 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 process.on('uncaughtException', err => {
-    logToFileAndConsole("CONSOLE", "INFO", err);
-    console.log('Uncaught:\n', err)
+    logToFileAndConsole("ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
+    // console.log('Uncaught:\n', err)
     console.log('PID:', process.pid)
 });
 
 process.on('SIGINT', handleClose);
 process.on('SIGTERM', handleClose);
 console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
-logToFileAndConsole("CONSOLE", "INFO", `Bot Start`);
+logToFileAndConsole("INFO", "CONSOLE", `Bot Start`);
 
 client.login(config.discord_setting.token)
 main()
 function main() {
     console.log(config.account.id)
-    currentSelect = 0;
+    //currentSelect = 0;
     process.title = '[Bot][-1] type .switch to select a bot';
     let timerdelay = 5;
     //get type  and set of all bot
@@ -458,6 +509,7 @@ async function handleClose() {
     }
     await Promise.all([
         setBotMenuNotInService(),
+        sleep(1000+bots.name.length*200),
         // new Promise(resolve => setTimeout(resolve, 1000)), // wait for 1 second
         // wait for all promises to complete
         //unregisterCommands(client)
@@ -525,15 +577,15 @@ function createBot(name) {
     child.on('error', e => {
         console.log(`Error from ${name}:\n${e}`)
     })
-    child.send({type: 'init',config: config})
+    child.send({ type: 'init', config: config })
     child.on('close', c => {
         child.removeAllListeners()
         bots.setBot(name, undefined)
         if (c == 0) console.log(`${name}: stopped success`)
         else if (c >= 2000) {
-            console.log(`bot  ${name} err code = ${c}`)
+            logToFileAndConsole("ERROR", name, `closed with err code: ${c}`)
         } else {
-            console.log(`bot will restart at ${bot.reloadCD / 1000} second`)
+            logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`)
             // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
             setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : 10_000))
         }
@@ -541,7 +593,7 @@ function createBot(name) {
     child.on('message', m => {
         switch (m.type) {
             case 'logToFile':
-                logToFileAndConsole(name,m.value.type,m.value.msg)
+                logToFileAndConsole(m.value.type, name, m.value.msg)
                 break
             case 'setReloadCD':
                 bots.setBotReloadCD(name, m.value)
@@ -571,7 +623,7 @@ async function getChannelMsgFetch(channel, id) {
         oldmenu = await channel.messages.fetch(id, { force: true });
         return oldmenu;
     } catch (error) {
-        //console.log(error)
+        logToFileAndConsole("ERROR", "DISCORD", `getChannelMsgFetch: ${error}`)
         return undefined;
     }
 }
@@ -603,7 +655,7 @@ async function setBotMenuNotInService() {
     const author = {
         name: "當前Bots",
         iconURL: "https://i.imgur.com/AfFp7pu.png",
-        url: 'https://discord.js.org',
+        url: 'https://github.com/JKLoveUU/Bot2',
     };
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
@@ -659,7 +711,7 @@ function generateBotMenuEmbed() {
     const author = {
         name: "當前Bots",
         iconURL: "https://i.imgur.com/AfFp7pu.png",
-        url: 'https://discord.js.org',
+        url: 'https://github.com/JKLoveUU/Bot2',
     };
     let botsfield = '';
     const longestLength = bots.name.reduce((longest, a) => {
@@ -680,9 +732,10 @@ function generateBotMenuEmbed() {
             { name: `目前共 \`${bots.name.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
         )
         .setTimestamp()
-        .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+        .setFooter({ text: '更新於', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
+//General Bot Control Menu
 function generateGeneralBotControlMenu(botinfo) {
     const embed = generateGeneralBotControlMenuEmbed(botinfo);
     const row1 = new MessageActionRow().addComponents(
@@ -803,6 +856,13 @@ function generateGeneralBotControlMenuEmbed(botinfo) {
         .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
+//Raid Bot Control Menu
+function generateRaidBotControlMenu(botinfo) {
+    const embed = generateRaidBotControlMenuEmbed(botinfo);
+}
+function generateRaidBotControlMenuEmbed(botinfo) {
+
+}
 function discordWhiteListCheck(member) {
     //console.log(member)
     // Check if the member is in the whitelist members
@@ -856,6 +916,7 @@ const botstatus = {
     2000: 'raid - closed', //unused
     2001: 'Restarting',
     2200: 'Running',
+    2401: 'Closed(RaidFarm Not Found)',
     //  General 區
     3000: 'general - closed',   //unused
 
