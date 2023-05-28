@@ -47,6 +47,8 @@ function logger(logToFile = false, type = "INFO", ...args) {
 //lib
 const mapart = require(`./lib/mapart`);
 const craftAndExchange = require(`./lib/craftAndExchange`);
+const basicCommand = require(`./lib/basicCommand`)
+const commands = [mapart, craftAndExchange]
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
@@ -78,7 +80,10 @@ const bot = (() => { // createMcBot
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
         bot.taskManager = taskManager;
+        bot.gkill = kill;
+        bot.botinfo= botinfo;
         taskManager.init();
+        await basicCommand.init(bot, process.argv[2], logger);
         await mapart.init(bot, process.argv[2], logger);
         await craftAndExchange.init(bot, process.argv[2], logger);
         process.send({ type: 'setStatus', value: 3200 })
@@ -248,57 +253,72 @@ const taskManager = {
         }
     },
     isTask(args) {
+        //console.log("識別ing ",args)
         // {
         //     vaild: true,             
         //     longRunning: false,
         //     permissionRequre: 0,     //reserved             
         // }
         let result
-        switch (true) {
-            case mapart.identifier.includes(args[0]):
-                result = mapart.parse(args)
-                break;
-            case craftAndExchange.identifier.includes(args[0]):
-                result = craftAndExchange.parse(args)
-                break;
-            case args[0] === 'info':
-            case args[0] === 'i':
-                result = {
-                    vaild: true,
-                    longRunning: false,
-                    permissionRequre: 0,     //reserved        
+        for (let fc = 0; fc < commands.length && !result; fc++) {
+            if (commands[fc].identifier.includes(args[0])) {
+                for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+                    let args2 = args.slice(1, args.length)[0];
+                    if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                        result = commands[fc].cmd[cmd_index];
+                    }
                 }
-                break;
-            default:
-                result = {
-                    vaild: false,
+                if (!result) {
+                    result = commands[fc].cmdhelper
                 }
-                break;
+            }
         }
+        if (!result) {
+            for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+                //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+                if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+                    result = basicCommand.cmd[cmd_index];
+                }
+            }
+        }
+        if (!result) result = { vaild: false };
         return result
         //return false
     },
     async execute(task) {
         logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
+        let args = task.content
         //console.log(task)
-        if (login) await this.save();
         if (task.source == 'console') task.console = logger;
-        switch (true) {
-            case mapart.identifier.includes(task.content[0]):
-                await mapart.execute(task)
-                break;
-            case craftAndExchange.identifier.includes(task.content[0]):
-                await craftAndExchange.execute(task)
-                break;
-            case task.content[0] === 'info':
-            case task.content[0] === 'i':
-                await bot_cmd_info();
-                break;
-            default:
-                break;
+        let result
+        for (let fc = 0; fc < commands.length && !result; fc++) {
+            if (commands[fc].identifier.includes(args[0])) {
+                for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+                    let args2 = args.slice(1, args.length)[0];
+                    if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                        result = commands[fc].cmd[cmd_index];
+                    }
+                }
+                if (!result) {
+                    result = commands[fc].cmdhelper
+                }
+            }
         }
+        if (!result) {
+            for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+                //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+                if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+                    result = basicCommand.cmd[cmd_index];
+                }
+            }
+        }
+        if (result.vaild != true) {
+            console.log(task)
+            logger(true, 'ERROR', `task ${task.displayName} not found`)
+            return
+        }
+        await result.execute(task)
         logger(true, 'INFO', `task ${task.displayName} completed`)
-        if (login) await this.save();
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
@@ -313,8 +333,10 @@ const taskManager = {
         this.tasking = true;
         this.tasksort()
         let crtTask = this.tasks[0]
+        if (login) await this.save();
         await this.execute(crtTask)
         this.tasks.shift()
+        if (login) await this.save();
         this.tasking = false;
         if (this.tasks.length) await this.loop()
     },
@@ -410,7 +432,7 @@ process.on('message', async (message) => {
             break;
         case 'cmd':
             let args = message.text.slice(1).split(' ')
-            console.log(args)
+            //console.log(args)
             let isTask = taskManager.isTask(args)
             if (isTask.vaild) {
                 let tk = new Task(10, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
