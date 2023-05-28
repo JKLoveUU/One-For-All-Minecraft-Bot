@@ -482,7 +482,7 @@ client.login(config.discord_setting.token)
 main()
 function main() {
     console.log(config.account.id)
-    //currentSelect = 0;
+    currentSelect = 0;
     process.title = '[Bot][-1] type .switch to select a bot';
     let timerdelay = 5;
     //get type  and set of all bot

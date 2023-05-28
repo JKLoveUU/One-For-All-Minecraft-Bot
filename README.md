@@ -1,45 +1,43 @@
 # Bot2
-minecraft bot for mcfallout server
 
-# ???
-# TODO
-    - Discord 各功能 介面
-    
+Minecraft Bot for McFallout server.
+
+## TODO
+
+- Discord Feature Interface
+- Rename Logs by Date
+- Pending Features
+- Limit Message Sending Speed
+- TAB Completion
+- Mapart
+- Clear Area
+- Villager Trading
+
 ## Craft and Exchange
 * autoset 
-    - 輸出訊息未對應
+    - Message output not properly matched?
 
 --- 
-* 目前實現功能
+* Implemented Features
     * Discord
-        1. ~~轉交給 CMD Console
-        2. 控制 & 轉發
-        3. ~~顯示狀態~~
+        1. Pass to CMD Console
+        2. Control & Forward
+        3. Display Status
     * Agent
-        1. 任務排程
-        2. 定期重啟
-        3. 異常檢測
+        1. Task Scheduling
+        2. Regular Restart (no longer necessary)
     * DM Control
-        1. 轉交給 CMD Console
-        2. 限制發消息速度
+        1. Pass to CMD Console
     * CMD Console
-        1. 識別命令來源 DM / DC / Console
-        並指在相應地方反映
-        2. TAB 補全
-        3. etc
-    * 村民交易
-        1. 背包實現 
-        2. 容器交互
-        3. 村民介面實現
-        4. 村民搜尋
-        5. 玩家移動
+        1. Identify Command Source (DM / DC / Console)
+        and reflect accordingly in the appropriate location
+
 # Testing
 
 ## First
 
 `git clone github.com/JKLoveUU/Bot2`
 
-`go get`
+`npm install`
 
-`go run .`
-
+`node .`
