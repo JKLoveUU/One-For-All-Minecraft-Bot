@@ -47,7 +47,8 @@ function logger(logToFile = false, type = "INFO", ...args) {
 //lib
 const mapart = require(`./lib/mapart`);
 const craftAndExchange = require(`./lib/craftAndExchange`);
-const basicCommand = require(`./lib/basicCommand`)
+const basicCommand = require(`./lib/basicCommand`);
+const { date } = require('js-binary/lib/types');
 const commands = [mapart, craftAndExchange]
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
@@ -79,6 +80,7 @@ const bot = (() => { // createMcBot
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
+        bot.chatManager = chatManager;
         bot.taskManager = taskManager;
         bot.gkill = kill;
         bot.botinfo= botinfo;
@@ -86,6 +88,7 @@ const bot = (() => { // createMcBot
         await basicCommand.init(bot, process.argv[2], logger);
         await mapart.init(bot, process.argv[2], logger);
         await craftAndExchange.init(bot, process.argv[2], logger);
+        bot._client.write('client_command', { payload: 0 })     //fix death bug
         process.send({ type: 'setStatus', value: 3200 })
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
@@ -109,13 +112,8 @@ const bot = (() => { // createMcBot
         if (debug) {
             logger(false, 'CHAT', jsonMsg.toAnsi())
         }
-
-        //console.log(jsonMsg.toString())
-        //let time = new Date();
     })
     bot.on('dm', async (jsonMsg) => {
-        // let abc = jsonMsg.toMotd()
-        // console.log(abc)
         let args = jsonMsg.toString().split(' ')
         let playerID = args[0].slice(1, args[0].length);
         let cmds = args.slice(3, args.length);
@@ -143,6 +141,9 @@ const bot = (() => { // createMcBot
     })
     bot._client.on('playerlist_header', () => {
         botTabhandler(bot.tablist)
+    })
+    bot._client.on('map', (mapdata) => {
+        //console.log(mapdata)
     })
     //---------------
     bot.on('error', async (error) => {
@@ -220,7 +221,32 @@ class Task {
         this.discordUser = discordUser;
     }
 }
-
+const chatManager = {
+    q: [],
+    pq: [],
+    cd: 400,
+    lastSend: Date.now(),
+    checker: setInterval(async () => {
+        if(chatManager.q.length==0&&chatManager.pq.length==0) return
+        if(Date.now() - chatManager.lastSend<chatManager.cd) return
+        if(chatManager.pq.length!=0){
+            bot.chat(chatManager.pq.shift());
+            chatManager.lastSend= Date.now()
+            return
+        }
+        if(chatManager.q.length!=0){
+            bot.chat(chatManager.q.shift());
+            chatManager.lastSend= Date.now()
+            return
+        }
+    }, 10),
+    chat: async function(text){
+        this.q.push(text)
+    },
+    cmd: async function(text){
+        this.pq.push(text)
+    }
+}
 const taskManager = {
     // eventl: new EventEmitter(),
     tasks: [],
@@ -240,9 +266,14 @@ const taskManager = {
         if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
             this.save()
         } else {
-            let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
-            this.tasks = tt.tasks
-            this.err_tasks = tt.err_tasks
+            try{
+                let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
+                this.tasks = tt.tasks
+                this.err_tasks = tt.err_tasks
+            }catch(e){
+                await this.save()
+            }
+    
         }
         //console.log(`task init complete / ${this.tasks.length} tasks now`)
         //自動執行
@@ -356,9 +387,6 @@ const taskManager = {
     //     this.eventl.emit('commit', task);
     // },
 }
-async function bot_cmd_info() {
-
-}
 function botTabhandler(tab) {
     const header = tab.header.extra
     if (!header) return
@@ -408,9 +436,10 @@ async function readConfig(file) {
     var com_file = await JSON.parse(raw_file);
     return com_file;
 }
-process.on('uncaughtException', err => {
+process.on('uncaughtException', async(err) => {
     logger(true, 'ERROR', err);
     console.log(err)
+    //if (login) try{await taskManager.save()}catch(e){};
     kill(1000)
 });
 process.on('message', async (message) => {
