@@ -2,6 +2,9 @@
 
 Minecraft Bot for McFallout server.
 
+# Contribute
+- [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
+
 ## TODO
 
 - Discord Feature Interface
@@ -34,7 +37,7 @@ Minecraft Bot for McFallout server.
 
 # Testing
 
-## First
+# Develope
 
 `git clone github.com/JKLoveUU/Bot2`
 
