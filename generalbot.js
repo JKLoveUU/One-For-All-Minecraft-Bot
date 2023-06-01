@@ -80,11 +80,11 @@ const bot = (() => { // createMcBot
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
-        bot.chatManager = chatManager;
-        bot.taskManager = taskManager;
         bot.gkill = kill;
         bot.botinfo= botinfo;
         taskManager.init();
+        chatManager.init();
+        mapManager.init();
         await basicCommand.init(bot, process.argv[2], logger);
         await mapart.init(bot, process.argv[2], logger);
         await craftAndExchange.init(bot, process.argv[2], logger);
@@ -142,9 +142,6 @@ const bot = (() => { // createMcBot
     bot._client.on('playerlist_header', () => {
         botTabhandler(bot.tablist)
     })
-    bot._client.on('map', (mapdata) => {
-        //console.log(mapdata)
-    })
     //---------------
     bot.on('error', async (error) => {
         if (error?.message?.includes('RateLimiter disallowed request')) {
@@ -187,6 +184,44 @@ async function kill(code = 1000) {
     bot.end()
     process.exit(code)
 }
+const mapManager = {
+    maplist: [],
+    init: function(){
+        bot.mapManager = this
+        bot._client.on('map', (mapdata) => {
+            //console.log(mapdata)
+        })
+    }
+}
+const chatManager = {
+    q: [],
+    pq: [],
+    cd: 400,
+    lastSend: Date.now(),
+    checker: setInterval(async () => {
+        if(chatManager.q.length==0&&chatManager.pq.length==0) return
+        if(Date.now() - chatManager.lastSend<chatManager.cd) return
+        if(chatManager.pq.length!=0){
+            bot.chat(chatManager.pq.shift());
+            chatManager.lastSend= Date.now()
+            return
+        }
+        if(chatManager.q.length!=0){
+            bot.chat(chatManager.q.shift());
+            chatManager.lastSend= Date.now()
+            return
+        }
+    }, 10),
+    chat: async function(text){
+        this.q.push(text)
+    },
+    cmd: async function(text){
+        this.pq.push(text)
+    },
+    init: function(){
+        bot.chatManager = this
+    }
+}
 class Task {
     priority = 10;
     displayName = '';
@@ -221,32 +256,6 @@ class Task {
         this.discordUser = discordUser;
     }
 }
-const chatManager = {
-    q: [],
-    pq: [],
-    cd: 400,
-    lastSend: Date.now(),
-    checker: setInterval(async () => {
-        if(chatManager.q.length==0&&chatManager.pq.length==0) return
-        if(Date.now() - chatManager.lastSend<chatManager.cd) return
-        if(chatManager.pq.length!=0){
-            bot.chat(chatManager.pq.shift());
-            chatManager.lastSend= Date.now()
-            return
-        }
-        if(chatManager.q.length!=0){
-            bot.chat(chatManager.q.shift());
-            chatManager.lastSend= Date.now()
-            return
-        }
-    }, 10),
-    chat: async function(text){
-        this.q.push(text)
-    },
-    cmd: async function(text){
-        this.pq.push(text)
-    }
-}
 const taskManager = {
     // eventl: new EventEmitter(),
     tasks: [],
@@ -263,6 +272,7 @@ const taskManager = {
         });
     },
     async init() {
+        bot.taskManager = this;
         if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
             this.save()
         } else {
@@ -284,12 +294,6 @@ const taskManager = {
         }
     },
     isTask(args) {
-        //console.log("識別ing ",args)
-        // {
-        //     vaild: true,             
-        //     longRunning: false,
-        //     permissionRequre: 0,     //reserved             
-        // }
         let result
         for (let fc = 0; fc < commands.length && !result; fc++) {
             if (commands[fc].identifier.includes(args[0])) {
@@ -466,10 +470,7 @@ process.on('message', async (message) => {
             if (isTask.vaild) {
                 let tk = new Task(10, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
                 taskManager.assign(tk, isTask.longRunning)
-                // console.log(taskManager.isImm(cmds))
-
             }
-            //交給CommandManager
             break;
         case 'chat':
             bot.chat(message.text)

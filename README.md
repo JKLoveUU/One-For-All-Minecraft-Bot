@@ -6,7 +6,8 @@ Minecraft Bot for McFallout server.
 ## Contribute
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
 ## Tutorial
-Not Implemented :(
+    - [Usage](/LICENSE)]
+    - [MIT](/LICENSE)
 ## Features
 ### Current
 * Discord
@@ -24,16 +25,22 @@ Not Implemented :(
 #### Exchange(ShopItem) 
 
 ### Planing
-- Discord Feature Interface
-- Rename Logs by Date
-- TAB Completion
-- Mapart
-- Clear Area
-- Villager Trading
+* Discord
+    1. 突襲介面
+    2. 其他功能的介面
+* Console
+    1. 將log檔案重新命名
+    2. TAB completer
+    3. command usage suggest
+    4. .help .?
+* MC-Feature
+    1. Mapart (舊的過太久 看不懂了qq)
+    2. Clear Area
+    3. Villager Trading 
 --- 
-## Develope
+## Develop
 
-`git clone github.com/JKLoveUU/Bot2`
+`git clone https://github.com/JKLoveUU/Bot2.git`
 
 `npm install`
 
