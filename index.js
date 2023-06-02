@@ -102,7 +102,7 @@ const bots = {
                     status: 0,
                     type: type,
                     crtType: crtType,
-                    reloadCD: 10_000,
+                    reloadCD: config.setting.reconnect_CD,
                     debug: debug ? true : false,
                 }
             )
@@ -523,6 +523,7 @@ function initBot(name) {
     bots.setBot(name, undefined);
     if (!profiles[name]) {
         bots.setBotStatus(name, 1000)
+        logToFileAndConsole('ERROR',name,`profiles中無 ${name} 資料`)
         return
     }
     if (!profiles[name].type) {
@@ -587,7 +588,7 @@ function createBot(name) {
         } else {
             logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`)
             // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
-            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : 10_000))
+            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD))
         }
     })
     child.on('message', m => {

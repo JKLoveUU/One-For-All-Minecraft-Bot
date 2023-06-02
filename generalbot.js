@@ -60,7 +60,7 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
     fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
 }
-process.send({ type: 'setReloadCD', value: 10_000 })
+process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :10_000})
 process.send({ type: 'setStatus', value: 3001 })
 const botinfo = {
     server: -1,
@@ -90,6 +90,7 @@ const bot = (() => { // createMcBot
         await craftAndExchange.init(bot, process.argv[2], logger);
         bot._client.write('client_command', { payload: 0 })     //fix death bug
         process.send({ type: 'setStatus', value: 3200 })
+        process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :10_000})
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
             'dm'
@@ -441,8 +442,8 @@ async function readConfig(file) {
     return com_file;
 }
 process.on('uncaughtException', async(err) => {
-    logger(true, 'ERROR', err);
-    console.log(err)
+    logger(true, 'ERROR', err+"\n"+err.stack);
+    //console.log(err)
     //if (login) try{await taskManager.save()}catch(e){};
     kill(1000)
 });

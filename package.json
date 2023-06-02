@@ -38,6 +38,7 @@
     "fs": "^0.0.1-security",
     "mineflayer": "^4.8.1",
     "moment": "^2.29.1",
+    "prismarine-schematic": "^1.2.3",
     "silly-datetime": "^0.1.2",
     "toml-require": "^1.2.0"
   }
