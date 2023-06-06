@@ -6,3 +6,6 @@ dc-js/
 mc-js/
 logs/
 test/
+raid/
+config/
+package-lock.json

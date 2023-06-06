@@ -127,7 +127,8 @@ const bot = (() => { // createMcBot
             let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
             taskManager.assign(tk, isTask.longRunning)
             // console.log(taskManager.isImm(cmds))
-
+        }else{
+            bot.chat(`/m ${playerID} 無效的指令 輸入.help 查看幫助 若要轉發消息使用 say <text>`)
         }
         //console.log(jsonMsg.toString())
         logger(true, 'CHAT', jsonMsg.toString())
@@ -152,11 +153,13 @@ const bot = (() => { // createMcBot
             await kill(1901)
         } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
             await kill(1902)
+        } else if (error?.message?.includes('read ECONNRESET')) {
+            await kill(1000)
         }
         console.log('[ERROR]name:\n' + error.name)
         console.log('[ERROR]msg:\n' + error.message)
         console.log('[ERROR]code:\n' + error.code)
-        logger(true, 'ERROR', error);
+        logger(true, 'ERROR', error+'\n'+error.stack);
         await kill(1000)
     })
     bot.on('kicked', async (reason, loggedIn) => {
@@ -164,7 +167,7 @@ const bot = (() => { // createMcBot
         await kill(1000)
     })
     bot.on('death', () => {
-        logger(true, 'INFO', `Death at ${new Date()}`)
+        logger(true, 'INFO', `Death at Location: ${bot.entity.position} server: ${botinfo.server}`)
     })
     bot.once('end', async () => {
         logger(true, 'WARN', `${process.argv[2]} disconnect`)
@@ -358,6 +361,7 @@ const taskManager = {
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
+            logger(true,'INFO',"解析到長時間指令 以新增到列隊")
             this.tasks.push(task)
             if (!this.tasking) await this.loop()
         } else {
@@ -471,6 +475,8 @@ process.on('message', async (message) => {
             if (isTask.vaild) {
                 let tk = new Task(10, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
                 taskManager.assign(tk, isTask.longRunning)
+            } else {
+                console.log("無效的指令 輸入.help 查看幫助 若要轉發消息使用 .say <text>")
             }
             break;
         case 'chat':
