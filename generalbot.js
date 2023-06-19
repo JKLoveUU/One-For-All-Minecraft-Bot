@@ -111,6 +111,7 @@ const bot = (() => { // createMcBot
     })
     bot.on('message', async (jsonMsg) => {
         if (debug) {
+            if(jsonMsg.toString().includes("目標生命 : ❤❤❤❤❤❤❤❤❤❤")) return
             logger(false, 'CHAT', jsonMsg.toAnsi())
         }
     })
@@ -164,6 +165,11 @@ const bot = (() => { // createMcBot
     })
     bot.on('kicked', async (reason, loggedIn) => {
         logger(true, 'WARN', `${loggedIn}, kick reason ${reason}`)
+        if(reason.includes("The proxy server is restarting")){
+            process.send({ type: 'setReloadCD', value: 120_000 })
+            process.send({ type: 'setStatus', value: 100 })
+            await kill(1003)
+        }
         await kill(1000)
     })
     bot.on('death', () => {
