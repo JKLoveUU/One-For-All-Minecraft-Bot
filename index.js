@@ -594,7 +594,8 @@ function createBot(name) {
     child.on('message', m => {
         switch (m.type) {
             case 'logToFile':
-                logToFileAndConsole(m.value.type, name, m.value.msg)
+                if(bot.crtType=='raid') logToFileAndConsole(m.value.type, name.substring(0, 4), m.value.msg)
+                else logToFileAndConsole(m.value.type, name, m.value.msg)
                 break
             case 'setReloadCD':
                 bots.setBotReloadCD(name, m.value)
@@ -897,7 +898,8 @@ const exitcode = {
     1000: 'unknown error',
     1001: 'server reload',
     1002: 'client reload',
-    1003: 'client error reload',
+    1003: 'proxy server restarting',
+    1004: 'client error reload',
     1900: 'RateLimiter disallowed request',
     1901: 'Failed to obtain profile data',
     1902: 'FetchError: read ECONNRESET',
@@ -911,6 +913,7 @@ const botstatus = {
     1: 'free',
     2: 'in tasking',
     3: 'raid',
+    100:  'proxy server restarting',
     1000: 'Closed(Profile Not Found)',
     1001: 'Closed(Type Not Found)',
     //  Raid 區
