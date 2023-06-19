@@ -433,7 +433,8 @@ async function init() {
       }
       //logger(`I|E: ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) Clc: ${`${grinde.clock}`.padStart(4, ' ')
       //}`)
-      logger(true, "INFO", `[\x1b[32mReport\x1b[0m] dE ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) [${fcfg.server[1]}] TPS: ${tpsColor}${`${(tps.toFixed(1)).padStart(4, ' ')}`}\x1b[0m bal: ${(grinde.eff.lastmoney.toString()).padStart(8, ' ')}`)
+      logger(true, "INFO", `dE ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) [${fcfg.server[1]}] TPS: ${tpsColor}${`${(tps.toFixed(1)).padStart(4, ' ')}`}\x1b[0m bal: ${(grinde.eff.lastmoney.toString()).padStart(8, ' ')}`)
+      //  [\x1b[32mReport\x1b[0m] 
       if (dmoney > 0) grinde.keepalive.refresh()
       grinde.clock = 0
     }, 600_000)
@@ -822,112 +823,130 @@ const taskManager = {
   tasking: false,
   //
   tasksort() {
-    this.tasks.sort((a, b) => {
-      if (a.priority === b.priority) {
-        return a.timestamp - b.timestamp;
-      } else {
-        return a.priority - b.priority;
-      }
-    });
+      this.tasks.sort((a, b) => {
+          if (a.priority === b.priority) {
+              return a.timestamp - b.timestamp;
+          } else {
+              return a.priority - b.priority;
+          }
+      });
   },
   async init() {
-    if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
-      this.save()
-    } else {
-      let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
-      this.tasks = tt.tasks
-      this.err_tasks = tt.err_tasks
-    }
-    //console.log(`task init complete / ${this.tasks.length} tasks now`)
-    //自動執行
-    if (this.tasks.length != 0 && !this.tasking) {
-      logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
-      await sleep(3000)
-      await this.loop()
-    }
+      bot.taskManager = this;
+      if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
+          this.save()
+      } else {
+          try{
+              let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
+              this.tasks = tt.tasks
+              this.err_tasks = tt.err_tasks
+          }catch(e){
+              await this.save()
+          }
+  
+      }
+      //console.log(`task init complete / ${this.tasks.length} tasks now`)
+      //自動執行
+      if (this.tasks.length != 0 && !this.tasking) {
+          logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
+          await sleep(3000)
+          //await this.loop()
+      }
   },
   isTask(args) {
-    // {
-    //     vaild: true,             
-    //     longRunning: false,
-    //     permissionRequre: 0,     //reserved             
-    // }
-    let result
-    switch (true) {
-      case mapart.identifier.includes(args[0]):
-        result = mapart.parse(args)
-        break;
-      case craftAndExchange.identifier.includes(args[0]):
-        result = craftAndExchange.parse(args)
-        break;
-      case args[0] === 'info':
-      case args[0] === 'i':
-        result = {
-          vaild: true,
-          longRunning: false,
-          permissionRequre: 0,     //reserved        
-        }
-        break;
-      default:
-        result = {
-          vaild: false,
-        }
-        break;
-    }
-    return result
-    //return false
+      let result
+      for (let fc = 0; fc < commands.length && !result; fc++) {
+          if (commands[fc].identifier.includes(args[0])) {
+              for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+                  let args2 = args.slice(1, args.length)[0];
+                  if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                      result = commands[fc].cmd[cmd_index];
+                  }
+              }
+              if (!result) {
+                  result = commands[fc].cmdhelper
+              }
+          }
+      }
+      if (!result) {
+          for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+              //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+              if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+                  result = basicCommand.cmd[cmd_index];
+              }
+          }
+      }
+      if (!result) result = { vaild: false };
+      return result
+      //return false
   },
   async execute(task) {
-    logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
-    //console.log(task)
-    if (login) await this.save();
-    if (task.source == 'console') task.console = logger;
-    switch (true) {
-      case mapart.identifier.includes(task.content[0]):
-        await mapart.execute(task)
-        break;
-      case craftAndExchange.identifier.includes(task.content[0]):
-        await craftAndExchange.execute(task)
-        break;
-      case task.content[0] === 'info':
-      case task.content[0] === 'i':
-        await bot_cmd_info();
-        break;
-      default:
-        break;
-    }
-    logger(true, 'INFO', `task ${task.displayName} completed`)
-    if (login) await this.save();
+      logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
+      let args = task.content
+      //console.log(task)
+      if (task.source == 'console') task.console = logger;
+      let result
+      for (let fc = 0; fc < commands.length && !result; fc++) {
+          if (commands[fc].identifier.includes(args[0])) {
+              for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+                  let args2 = args.slice(1, args.length)[0];
+                  if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                      result = commands[fc].cmd[cmd_index];
+                  }
+              }
+              if (!result) {
+                  result = commands[fc].cmdhelper
+              }
+          }
+      }
+      if (!result) {
+          for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+              //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+              if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+                  result = basicCommand.cmd[cmd_index];
+              }
+          }
+      }
+      if (result.vaild != true) {
+          console.log(task)
+          logger(true, 'ERROR', `task ${task.displayName} not found`)
+          return
+      }
+      await result.execute(task)
+      logger(true, 'INFO', `task ${task.displayName} completed`)
   },
   async assign(task, longRunning = true) {
-    if (longRunning) {
-      this.tasks.push(task)
-      if (!this.tasking) await this.loop()
-    } else {
-      this.execute(task)
-    }
+      if (longRunning) {
+          logger(true,'INFO',"解析到長時間指令 以新增到列隊")
+          this.tasks.push(task)
+         // if (!this.tasking) await this.loop()
+      } else {
+          this.execute(task)
+      }
   },
   async loop() {
-    if (this.tasking) return
-    this.tasking = true;
-    this.tasksort()
-    let crtTask = this.tasks[0]
-    await this.execute(crtTask)
-    this.tasks.shift()
-    this.tasking = false;
-    if (this.tasks.length) await this.loop()
+      if (this.tasking) return
+      this.tasking = true;
+      this.tasksort()
+      let crtTask = this.tasks[0]
+      if (login) await this.save();
+      await this.execute(crtTask)
+      this.tasks.shift()
+      if (login) await this.save();
+      this.tasking = false;
+      if (this.tasks.length) await this.loop()
   },
   async save() {
-    let data = {
-      'tasks': this.tasks,
-      'err_tasks': this.err_tasks,
-    }
-    // console.log('tasks saving..')
-    // console.log(data)
-    await fsp.writeFile(`${process.cwd()}/config/${process.argv[2]}/task.json`, JSON.stringify(data, null, '\t'), function (err, result) {
-      if (err) console.log('tasks save error', err);
-    });
-    //console.log('task complete')
+      let data = {
+          'tasks': this.tasks,
+          'err_tasks': this.err_tasks,
+      }
+      // console.log('tasks saving..')
+      // console.log(data)
+      await fsp.writeFile(`${process.cwd()}/config/${process.argv[2]}/task.json`, JSON.stringify(data, null, '\t'), function (err, result) {
+          if (err) console.log('tasks save error', err);
+      });
+      //console.log('task complete')
   }
   // commit(task) {
   //     this.eventl.emit('commit', task);
