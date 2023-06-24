@@ -70,6 +70,7 @@ const botinfo = {
     tabUpdateTime: new Date(),
 }
 const bot = (() => { // createMcBot
+    logger(true, 'INFO', `Initializing | type:${process.argv[3]}`)
     const bot = mineflayer.createBot({
         host: profiles[process.argv[2]].host,
         port: profiles[process.argv[2]].port,
@@ -79,7 +80,7 @@ const bot = (() => { // createMcBot
     })
     const ChatMessage = require('prismarine-chat')("1.18.2")
     bot.once('spawn', async () => {
-        logger(true, 'INFO', `login as ${bot.username}|type:${process.argv[3]}`)
+        logger(true, 'INFO', `login as ${bot.username}`)
         bot.gkill = kill;
         bot.botinfo= botinfo;
         taskManager.init();
@@ -271,6 +272,8 @@ const taskManager = {
     tasks: [],
     err_tasks: [],
     tasking: false,
+    commands: commands,
+    basicCommand: basicCommand,
     //
     tasksort() {
         this.tasks.sort((a, b) => {
@@ -305,16 +308,16 @@ const taskManager = {
     },
     isTask(args) {
         let result
-        for (let fc = 0; fc < commands.length && !result; fc++) {
-            if (commands[fc].identifier.includes(args[0])) {
-                for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+        for (let fc = 0; fc < this.commands.length && !result; fc++) {
+            if (this.commands[fc].identifier.includes(args[0])) {
+                for (let cmd_index = 0; cmd_index < this.commands[fc].cmd.length && !result; cmd_index++) {
                     let args2 = args.slice(1, args.length)[0];
-                    if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
-                        result = commands[fc].cmd[cmd_index];
+                    if (this.commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                        result = this.commands[fc].cmd[cmd_index];
                     }
                 }
                 if (!result) {
-                    result = commands[fc].cmdhelper
+                    result = this.commands[fc].cmdhelper
                 }
             }
         }
@@ -336,16 +339,16 @@ const taskManager = {
         //console.log(task)
         if (task.source == 'console') task.console = logger;
         let result
-        for (let fc = 0; fc < commands.length && !result; fc++) {
-            if (commands[fc].identifier.includes(args[0])) {
-                for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+        for (let fc = 0; fc < this.commands.length && !result; fc++) {
+            if (this.commands[fc].identifier.includes(args[0])) {
+                for (let cmd_index = 0; cmd_index < this.commands[fc].cmd.length && !result; cmd_index++) {
                     let args2 = args.slice(1, args.length)[0];
-                    if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
-                        result = commands[fc].cmd[cmd_index];
+                    if (this.commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+                        result = this.commands[fc].cmd[cmd_index];
                     }
                 }
                 if (!result) {
-                    result = commands[fc].cmdhelper
+                    result = this.commands[fc].cmdhelper
                 }
             }
         }
@@ -486,8 +489,13 @@ process.on('message', async (message) => {
             }
             break;
         case 'chat':
-            bot.chat(message.text)
-            console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
+            try{
+                bot.chat(message.text)
+                console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
+            }catch(e){
+                logger(false,"ERROR","訊息發送失敗 try again")
+            }
+
             break;
         case 'reload':
             process.send({ type: 'setStatus', value: 3002 })
