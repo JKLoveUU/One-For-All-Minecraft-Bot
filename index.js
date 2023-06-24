@@ -81,13 +81,13 @@ const bots = {
      * @return {botsInstance}
      */
     getBot(index) {
-       // logToFileAndConsole("DEBUG", "CONSOLE",`query the bot ${index}`);
+        // logToFileAndConsole("DEBUG", "CONSOLE",`query the bot ${index}`);
         if (isNaN(index)) {
             let i = this.name.indexOf(index)
             if (i === -1) return -1
             return this.bots[i]
         }
-        if(index == -1) return -1;
+        if (index == -1) return -1;
         if (index >= this.name.length) return -1
         return this.bots[index]
     },
@@ -282,6 +282,11 @@ rl.on('line', async (input) => {
     } else {
         if (cs == -1 || cs == undefined) {
             console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
+        } else if (cs.c == undefined && cs.status == 0) {
+            console.log(`該 bot 未啟動 use .switch to select a bot`);
+        } else if (cs.c == undefined) {
+            console.log(`該 bot 不再線上請稍後在試`);
+
         } else {
             cs.c.send({ type: "chat", text: input });
         }
@@ -403,8 +408,8 @@ client.on('interactionCreate', async (interaction) => {
             targetBot = values[0].slice(15)
             console.log(targetBot)
             let targetBotIns = bots.getBot(targetBot)
-            if(targetBotIns===-1){
-                console.log("err at open menu for bot",targetBot)
+            if (targetBotIns === -1) {
+                console.log("err at open menu for bot", targetBot)
                 await interaction.reply({
                     content: `err at open menu for bot ${targetBot}`,
                     ephemeral: true
@@ -412,7 +417,7 @@ client.on('interactionCreate', async (interaction) => {
                 return
             }
             //need check status here
-            if(targetBotIns.status==2200){
+            if (targetBotIns.status == 2200) {
                 await interaction.reply({
                     content: 'Menu For Raid Not Implemented',
                     ephemeral: true
@@ -420,7 +425,7 @@ client.on('interactionCreate', async (interaction) => {
                 return
                 let botinfo = await bots.getBotInfo(targetBot)
                 interaction.reply(generateRaidBotControlMenu(botinfo))
-            }else if(targetBotIns.status==3200){
+            } else if (targetBotIns.status == 3200) {
                 let botinfo = await bots.getBotInfo(targetBot)
                 interaction.reply(generateGeneralBotControlMenu(botinfo))
                 return
@@ -509,7 +514,7 @@ async function handleClose() {
     }
     await Promise.all([
         setBotMenuNotInService(),
-        sleep(1000+bots.name.length*200),
+        sleep(1000 + bots.name.length * 200),
         // new Promise(resolve => setTimeout(resolve, 1000)), // wait for 1 second
         // wait for all promises to complete
         //unregisterCommands(client)
@@ -523,7 +528,7 @@ function initBot(name) {
     bots.setBot(name, undefined);
     if (!profiles[name]) {
         bots.setBotStatus(name, 1000)
-        logToFileAndConsole('ERROR',name,`profiles中無 ${name} 資料`)
+        logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`)
         return
     }
     if (!profiles[name].type) {
@@ -594,7 +599,7 @@ function createBot(name) {
     child.on('message', m => {
         switch (m.type) {
             case 'logToFile':
-                if(bot.crtType=='raid') logToFileAndConsole(m.value.type, name.substring(0, 4), m.value.msg)
+                if (bot.crtType == 'raid') logToFileAndConsole(m.value.type, name.substring(0, 4), m.value.msg)
                 else logToFileAndConsole(m.value.type, name, m.value.msg)
                 break
             case 'setReloadCD':
@@ -913,7 +918,7 @@ const botstatus = {
     1: 'free',
     2: 'in tasking',
     3: 'raid',
-    100:  'proxy server restarting',
+    100: 'proxy server restarting',
     1000: 'Closed(Profile Not Found)',
     1001: 'Closed(Type Not Found)',
     //  Raid 區

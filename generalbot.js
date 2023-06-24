@@ -5,6 +5,7 @@ if (!process.argv[2]) {
 let debug = process.argv.includes("--debug");
 let login = false
 let config
+const path = require('path');
 const EventEmitter = require('events');
 const mineflayer = require("mineflayer");
 const sd = require('silly-datetime');
@@ -44,12 +45,27 @@ function logger(logToFile = false, type = "INFO", ...args) {
     console.log(`[${fmtTime}][${colortype}][${process.argv[2]}] ${args.join(' ')}`);
 }
 
+// const commandsPath = path.join(__dirname, 'src');
+// const commandFiles = fs.readdirSync(commandsPath)//.filter(file => file.endsWith('.js'));
+// console.log(commandsPath)
+// const commands = []
+// for(c of commandFiles){
+//     if(c=='basicCommand.js') continue
+//     // else console.log("load",commandFiles[c])
+//     // if(commandFiles[c]=='mapart.js') commands.push(require(`./lib/mapart`))
+//     // if(commandFiles[c]=='craftAndExchange.js') commands.push(require(`./lib/craftAndExchange`))
+//     const filePath = path.join(commandsPath,c);
+//     console.log(c)
+//     commands.push(require(filePath))
+// }
+//console.log(commands.length)
 //lib
-const mapart = require(`./lib/mapart`);
-const craftAndExchange = require(`./lib/craftAndExchange`);
-const basicCommand = require(`./lib/basicCommand`);
-const { date } = require('js-binary/lib/types');
-const commands = [mapart, craftAndExchange]
+//這裡應該改成從lib自動載入 加入commands 並init
+const template = require(`./src/mapart`);
+const mapart = require(`./src/mapart`);
+const craftAndExchange = require(`./src/craftAndExchange`);;
+const commands = [mapart, craftAndExchange,template]
+const basicCommand = require(`./src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
@@ -87,8 +103,9 @@ const bot = (() => { // createMcBot
         chatManager.init();
         mapManager.init();
         await basicCommand.init(bot, process.argv[2], logger);
-        await mapart.init(bot, process.argv[2], logger);
-        await craftAndExchange.init(bot, process.argv[2], logger);
+        for(c in commands){
+            await commands[c].init(bot, process.argv[2], logger);
+        }
         bot._client.write('client_command', { payload: 0 })     //fix death bug
         process.send({ type: 'setStatus', value: 3200 })
         process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :10_000})
