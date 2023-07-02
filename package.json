@@ -1,5 +1,5 @@
 {
-  "name": "bot2",
+  "name": "ofa-bot",
   "version": "1.0.0",
   "description": "minecraft bot for mcfallout server",
   "main": "index.js",
