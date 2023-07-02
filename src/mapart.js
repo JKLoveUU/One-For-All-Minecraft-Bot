@@ -14,8 +14,7 @@ const containerOperation = require(`../lib/containerOperation`);
 const mcFallout = require(`../lib/mcFallout`);
 const pathfinder = require(`../lib/pathfinder`);
 const schematic = require(`../lib/schematic`);
-const { dirxml, count } = require('console');
-const { astarfly } = require('../lib/pathfinder');
+const litematicPrinter = require('../lib/litematicPrinter');
 const console = require('console');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const wait = () => new Promise(setImmediate)
@@ -44,20 +43,20 @@ let mp_direction = {
         "inc_dz": -1,
     },
 }
-let mapart_cache = {
-    build: {
-        hash: "",
-        server: -1,
-        totalBlocks: -1,
-        startTime: Date.now(),
-        endTime: Date.now(),
-        interruptedBefore: 0,
-        counter: -1,
-    },
-    wrap: {
-        //not implemented
-    }
-}
+// let mapart_cache = {
+//     build: {
+//         hash: "",
+//         server: -1,
+//         totalBlocks: -1,
+//         startTime: Date.now(),
+//         endTime: Date.now(),
+//         interruptedBefore: 0,
+//         counter: -1,
+//     },
+//     wrap: {
+//         //not implemented
+//     }
+// }
 let mapart_cfg = {
     "schematic": {
         filename: "example_0_0.nbt",
@@ -118,16 +117,16 @@ const mapart = {
             longRunning: true,
             permissionRequre: 0,
         },
-        {//hash test
-            name: "hash test",
-            identifier: [
-                "hash",
-            ],
-            execute: get_hash_cfg,
-            vaild: true,
-            longRunning: false,
-            permissionRequre: 0,
-        },
+        // {//hash test
+        //     name: "hash test",
+        //     identifier: [
+        //         "hash",
+        //     ],
+        //     execute: get_hash_cfg,
+        //     vaild: true,
+        //     longRunning: false,
+        //     permissionRequre: 0,
+        // },
         {//debug toggle
             name: "toggle debug mode",
             identifier: [
@@ -154,7 +153,7 @@ const mapart = {
                 "info",
                 "i",
             ],
-            execute: notImplemented,
+            execute: mp_info,
             vaild: true,
             longRunning: false,
             permissionRequre: 0,
@@ -310,26 +309,33 @@ async function mp_set(task) {
         null,
     );
 }
-async function mp_build(task) {
-    const Item = require('prismarine-item')(bot.version)
-    let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
+async function mp_info(task) {
+    let mapart_info_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
     let stationConfig;
-    let materialsMode = mapart_build_cfg_cache.materialsMode;
+    let materialsMode = mapart_info_cfg_cache.materialsMode;
     if (materialsMode == 'station') {
-        stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_build_cfg_cache.station}`);
+        stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_info_cfg_cache.station}`);
     } else {
         await notImplemented(task)
         return
     }
-    if (!fs.existsSync(mapart_global_cfg.schematic_folder + mapart_build_cfg_cache.schematic.filename)) {
-        await taskreply(task,
-            `&7[&bMP&7] &c未發現投影 &7${mapart_build_cfg_cache.schematic.filename} &r請檢查設定`,
-            `未發現投影 ${mapart_build_cfg_cache.schematic.filename} 請檢查設定`,
-            null,
-        );
-        return;
+    console.log(mapart_info_cfg_cache)
+    await litematicPrinter.progress_query(task,bot)
+}
+async function mp_build(task) {
+    let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
+    mapart_build_cfg_cache.schematic.folder = mapart_global_cfg.schematic_folder;
+    mapart_build_cfg_cache.bot_id = bot_id
+    if(false){  //check args
+
     }
-    console.log("build test")
+    delete mapart_build_cfg_cache.open;
+    delete mapart_build_cfg_cache.wrap;
+    await litematicPrinter.build_file(task,bot,litematicPrinter.model_mapart,mapart_build_cfg_cache)
+    if(false){  //check args to build next ?
+
+    }
+    return
     //get cache here
     let currentMPCFG_Hash = await get_hash_cfg(mapart_build_cfg_cache.schematic);
     if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
@@ -342,7 +348,6 @@ async function mp_build(task) {
     let sch = await schematic.loadFromFile(mapart_global_cfg.schematic_folder + mapart_build_cfg_cache.schematic.filename)
     let parse_endTime = Date.now();
     console.log(mapart_cache)
-    console.log(mapart_build_cfg_cache)
     //console.log(sch)
     console.log(`解析時間 ${parse_endTime - parse_startTime} ms`)
     // console.log(sch.litematicaBitArray.getAt(sch.index(0, 1, 1)))
@@ -372,6 +377,7 @@ async function mp_stop(task) {
     stop = true
 }
 async function mp_test(task) {
+    //litematicPrinter.build(bot,"n")
     return
     let block = bot.blockAt(new Vec3(-7887, 145, -1695))
     // let ct = await openC(new Vec3(-7887, 145 ,-1695));
@@ -431,12 +437,15 @@ async function mp_open(task) {
     /**
      *      Init 檢查是否有未完成
     */
+    let crtoffsetindex = 0 ;
     for (let dx = 0; dx < mapart_open_cfg_cache["open"]["width"]; dx++) {
         for (let dy = 0; dy < mapart_open_cfg_cache["open"]["height"]; dy++) {
             let csmp = {
+                skip: false,
                 x: dx,
                 y: dy,
                 z: 0,
+                //mapartRealPos: new Vec3(sx + 128 * crtoffsetindex, 256, sz),
                 mapartRealPos: new Vec3(sx + 128 * (dx * mapart_open_cfg_cache["open"]["height"] + dy), 256, sz),
                 pos: mapart_ori.offset(dx, 0 - dy, 0),
                 itemframe: false,
@@ -450,6 +459,12 @@ async function mp_open(task) {
                 csmp.mapid = currentIF.metadata[8].nbtData.value.map.value;
                 csmp.finish = true;
             }
+            // if (mapart_open_cfg_cache["open"]["open_start"] != -1) {
+            //     if ((dx * mapart_open_cfg_cache["open"]["height"] + dy) < mapart_open_cfg_cache["open"]["open_start"]) csmp.skip = true;
+            // } else if (mapart_open_cfg_cache["open"]["open_end"] != -1) {
+            //     if ((dx * mapart_open_cfg_cache["open"]["height"] + dy) > mapart_open_cfg_cache["open"]["open_end"]) csmp.skip = true;
+            // }
+            // if(!csmp.skip) crtoffsetindex++;
             mpstate.push(csmp)
         }
     }
@@ -511,7 +526,7 @@ async function mp_open(task) {
     await moveToEmptySlot(44)
     for (let i = 0; i < mpstate.length;) {
         //console.log(i,mpstate[i])
-        if (mpstate[i].itemframe) {
+        if (mpstate[i].itemframe||mpstate[i].skip) {
             i++;
             continue
         }
@@ -552,7 +567,7 @@ async function mp_open(task) {
     }
     for (let i = 0; i < mpstate.length; i++) {
         await inv_sort()
-        if (mpstate[i].finish) continue
+        if (mpstate[i].finish||mpstate[i].skip) continue
         if (getEmptySlot().length == 0) {
             await bot.chat("/sethome mapart")
             await sleep(200)
@@ -736,11 +751,11 @@ async function mp_name(task) {
         flyingSpeed: 4.0,
         walkingSpeed: 4.0
     })
-    if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
-        save_cache(mapart_cache)
-    } else {
-        mapart_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)
-    }
+    // if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
+    //     save_cache(mapart_cache)
+    // } else {
+    //     mapart_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)
+    // }
     console.log(mapart_name_cfg_cache)
     //console.log(mapart_cache)
     await pathfinder.astarfly(bot, new Vec3(mapart_name_cfg_cache.wrap.anvil_stand[0], mapart_name_cfg_cache.wrap.anvil_stand[1], mapart_name_cfg_cache.wrap.anvil_stand[2]))
@@ -889,11 +904,11 @@ async function mp_copy(task) {
         flyingSpeed: 4.0,
         walkingSpeed: 4.0
     })
-    if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
-        save_cache(mapart_cache)
-    } else {
-        mapart_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)
-    }
+    // if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
+    //     save_cache(mapart_cache)
+    // } else {
+    //     mapart_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)
+    // }
     if (mapart_name_cfg_cache["wrap"]["copy_amount"] > 64) {
         console.log("Not Support copy amount great than 64")
         return
@@ -1039,10 +1054,10 @@ async function mp_copy(task) {
         await mcFallout.openPreventSpecItem(bot)
         let mt = 0
         let shulker_box
-        while(!shulker_box&& mt++ <3){
+        while (!shulker_box && mt++ < 3) {
             await pathfinder.astarfly(bot, mps.box.offset(standOffest.x, standOffest.y, standOffest.z), null, null, null, true)
             await sleep(50)
-            shulker_box =await containerOperation.openContainerWithTimeout(bot, mps.box, 3000);
+            shulker_box = await containerOperation.openContainerWithTimeout(bot, mps.box, 3000);
         }
         if (!shulker_box) {
             console.log(`開啟盒子-${i + 1} 失敗`, mps.box)
@@ -1156,19 +1171,19 @@ async function mp_wrap(task) {
     await sleep(500)
     //console.log(wrap_items)
     //console.log(counter)
-    for(let i = 0 ;i<counter;i++){
-        let input2 ,t = 0;
-        while(t++<3&&!input2){
+    for (let i = 0; i < counter; i++) {
+        let input2, t = 0;
+        while (t++ < 3 && !input2) {
             input2 = await containerOperation.openContainerWithTimeout(bot, inputVec, 1000)
         }
-        if(!input2){
+        if (!input2) {
             console.log("Can't open input box")
             return
         }
         //取出
         for (let gg = 0; gg < 27; gg++) {
-            if(wrap_items[gg].name==null) continue
-            let emptySlot = input2.firstEmptySlotRange(input2.inventoryStart,input2.inventoryEnd)
+            if (wrap_items[gg].name == null) continue
+            let emptySlot = input2.firstEmptySlotRange(input2.inventoryStart, input2.inventoryEnd)
             await bot.simpleClick.leftMouse(gg)
             await bot.simpleClick.rightMouse(emptySlot)
             await bot.simpleClick.leftMouse(gg)
@@ -1177,39 +1192,39 @@ async function mp_wrap(task) {
         await input2.close()
         await sleep(50)
         //放入
-        try{    //wait shulker
+        try {    //wait shulker
             let fail = false;
-			await new Promise(async (res, rej) => {
-				const timeout = setTimeout(()=>{
-					fail = true;
-					rej()
-				}, 3000)
-				while(!fail){
+            await new Promise(async (res, rej) => {
+                const timeout = setTimeout(() => {
+                    fail = true;
+                    rej()
+                }, 3000)
+                while (!fail) {
                     await sleep(10)
                     let block = bot.blockAt(outputVec)
                     //console.log(block)
-                    if(!block) continue
-                    if((block.name).indexOf('shulker')>=0) break
+                    if (!block) continue
+                    if ((block.name).indexOf('shulker') >= 0) break
                 }
                 clearTimeout(timeout)
-                res()			
-			})
-		}catch(e){
-			console.log("找不到")
+                res()
+            })
+        } catch (e) {
+            console.log("找不到")
             return
-		}
-        let output ,t2 = 0;
-        while(t2++<3&&!output){
+        }
+        let output, t2 = 0;
+        while (t2++ < 3 && !output) {
             output = await containerOperation.openContainerWithTimeout(bot, outputVec, 1000)
         }
-        if(!output){
+        if (!output) {
             console.log("Can't open output box")
             return
         }
         for (let gg = 0; gg < 27; gg++) {
-            if(wrap_items[gg].name==null) continue
+            if (wrap_items[gg].name == null) continue
             //console.log(wrap_items[gg].mapid)
-            if(wrap_items[gg].name=="filled_map"){
+            if (wrap_items[gg].name == "filled_map") {
                 let tgmp = -1;
                 for (let ff = 27; ff <= 62; ff++) {
                     if (output.slots[ff]?.nbt?.value?.map?.value == wrap_items[gg].mapid) {
@@ -1220,7 +1235,7 @@ async function mp_wrap(task) {
                 //console.log("map",tgmp,gg)
                 await bot.simpleClick.leftMouse(tgmp)
                 await bot.simpleClick.leftMouse(gg)
-            }else{
+            } else {
                 let tgmp = -1;
                 for (let ff = 27; ff <= 62; ff++) {
                     if (output.slots[ff]?.name == wrap_items[gg].name) {
@@ -1236,7 +1251,7 @@ async function mp_wrap(task) {
 
         await output.close()
         await sleep(50)
-        console.log(`第 ${i+1} 套 完成`)
+        console.log(`第 ${i + 1} 套 完成`)
         await bot.activateBlock(bot.blockAt(btvec));
         await sleep(250)
         //break;
@@ -1322,18 +1337,6 @@ async function save(caec) {
         if (err) console.log('mapart save error', err);
     });
     //console.log('task complete')
-}
-async function save_cache(mp_cache) {
-    await fsp.writeFile(`${process.cwd()}/config/${bot_id}/mapart_cache.json`, JSON.stringify(mp_cache, null, '\t'), function (err, result) {
-        if (err) console.log('mp_cache save error', err);
-    });
-    //console.log('task complete')
-}
-async function get_hash_cfg(mapart_cfg) {
-    const str = JSON.stringify(mapart_cfg);
-    const hash = crypto.createHash('sha256').update(str).digest('hex');
-    //console.log(`${hash}`);
-    return hash
 }
 async function stationRestock(stationConfig, RS_obj_array) {
     while (true) {
