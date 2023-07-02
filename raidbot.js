@@ -7,12 +7,17 @@ if (!process.argv[2]) {
   return
 }
 let debug = process.argv.includes("--debug");
+let login = false
 let config
 const mineflayer = require('mineflayer');
 const CNTA = require('chinese-numbers-to-arabic');
 const fs = require('fs')
+const fsp = require('fs').promises
+const sd = require('silly-datetime');
 //const pcfg = require(`../cfg/profiles.json`)[process.argv[2]]
 const profiles = require(`${process.cwd()}/profiles.json`);
+const commands = []
+const basicCommand = require(`./src/basicCommand`)
 let pcfg = {
   "farm": ["ExampleFarm1"],
   "printEff": true,
@@ -33,7 +38,7 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
 if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/raid.json`)) {
   logger(true, "INFO", "Creating config - raid.json")
   fs.writeFileSync(`${process.cwd()}/config/${process.argv[2]}/raid.json`, JSON.stringify(pcfg, null, '\t'), function (err, result) {
-    if (err) logger(true, "ERROR", `Unable to create ${process.argv[2]}/raid.json`,err)
+    if (err) logger(true, "ERROR", `Unable to create ${process.argv[2]}/raid.json`, err)
   });
   //logger(true, 'INFO', `Creating config - raid.json`)
 } else {
@@ -78,7 +83,7 @@ let global_farm_config = {
 if (!fs.existsSync(`${process.cwd()}/config/global/raidFarm.json`)) {
   logger(true, 'INFO', `Creating global config - raidFarm.json`)
   fs.writeFileSync(`${process.cwd()}/config/global/raidFarm.json`, JSON.stringify(global_farm_config, null, '\t'), function (err, result) {
-    if (err) logger(true, "ERROR", `Unable to create a Global raidFarm setting`,err)
+    if (err) logger(true, "ERROR", `Unable to create a Global raidFarm setting`, err)
   });
 } else {
   global_farm_config = readConfig(`${process.cwd()}/config/global/raidFarm.json`)
@@ -90,7 +95,7 @@ if (!fcfg) {
 }
 /** @param {number} ms */
 const timer = ms => new Promise(res => setTimeout(res, ms))
-process.send({ type: 'setReloadCD', value: 10_000 })
+process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
 process.send({ type: 'setStatus', value: 3001 })
 const botinfo = {
   server: -1,
@@ -154,9 +159,15 @@ const grinde = {
     }
   }
 }
-
+//test
+//console.log(fcfg.extra)
 if (true) { //config
   const mcData = require('minecraft-data')("1.18.2")
+  for (const i in grinde.ids.item.trash) {
+    if (grinde.ids.item.extra == grinde.ids.item.trash[i]) {
+      grinde.ids.item.trash[i] = 'bedrock';
+    }
+  }
   grinde.ids.item.emerald = mcData.itemsByName[grinde.ids.item.emerald].id
   grinde.ids.item.crossbow = mcData.itemsByName[grinde.ids.item.crossbow].id
   grinde.ids.item.totem = mcData.itemsByName[grinde.ids.item.totem].id
@@ -180,7 +191,8 @@ if (true) { //config
     grinde.ids.entity.raid[i] = mcData.entitiesByName[grinde.ids.entity.raid[i]].id
   grinde.ids.entity.capture = mcData.entitiesByName[grinde.ids.entity.capture].id
   grinde.ids.entity.vex = mcData.entitiesByName[grinde.ids.entity.vex].id
-
+  //test
+  //console.log(grinde.ids.item.extra)
   const { Vec3 } = require('vec3');
   ['anchor', 'lava', 'dump', 'egg', 'extra'].forEach(b => {
     fcfg.location[b] = new Vec3(...fcfg.location[b].slice(0, 3))
@@ -204,10 +216,10 @@ if (true) { //config
   if (grinde.look.yaw < 0) grinde.look.yaw += Math.PI * 2
 }
 
-const mc = (() => { // createMcBot
+const bot = (() => { // createMcBot
   logger(true, "INFO", `Logging into minecraft... ${pcfg.farm[0]} ${fcfg.displayName}`)
 
-  const mc = mineflayer.createBot({
+  const bot = mineflayer.createBot({
     host: profiles[process.argv[2]].host,
     port: profiles[process.argv[2]].port,
     username: profiles[process.argv[2]].username,
@@ -216,114 +228,127 @@ const mc = (() => { // createMcBot
     viewDistance: 2
   })
 
-  mc.once('spawn', () => {
-    logger(true, "INFO", `Logged into minecraft as ${mc.username}.`)
-    mc.setQuickBarSlot(1)
-    process.send({ type: 'setStatus', value: 2200 })
+  bot.once('spawn', async () => {
+    logger(true, "INFO", `Logged into minecraft as ${bot.username}.`)
+    bot.botinfo = botinfo;
+    await basicCommand.init(bot, process.argv[2], logger);
+    taskManager.init();
+    bot.setQuickBarSlot(1)
+    process.send({ type: 'setStatus', value: 2201 })
     if (process.argv[3] !== '1')
-      mc.chatAddPattern(
+      bot.chatAddPattern(
         /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
         'dm'
       )
-    mc.chatAddPattern(
+    bot.chatAddPattern(
       /^\[系統\] (\S+) 想要你?傳送到 (你|該玩家) 的位置$/,
       'tpa'
     )
-    mc.chatAddPattern(
+    bot.chatAddPattern(
       /^\[系統\] 成功操作綠寶石帳戶 :  - 1728 存款$/,
       'income'
     )
-    mc.chatAddPattern(
+    bot.chatAddPattern(
       /^\[系統\] .+ \(目前擁有 ([\d\.]+) 綠寶石\)$/,
       'paid'
     )
-    mc.chatAddPattern(
+    bot.chatAddPattern(
       /^Summoned to wait by CONSOLE$/,
       'wait'
     )
+    login = true
   })
 
-  mc.on(process.argv[3] === '1' ? 'messagestr' : 'dm', logger)
+  bot.on(process.argv[3] === '1' ? 'messagestr' : 'dm', logger)
 
-  mc.on('tpa', p => {
-    mc.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
+  bot.on('tpa', p => {
+    bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
     logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpa request`);
   })
-  mc.on('tpahere', p => {
-    mc.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
+  bot.on('tpahere', p => {
+    bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
     logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpahere request`);
   })
-  mc.on('wait', async () => {
+  bot.on('wait', async () => {
     process.send({ type: 'setReloadCD', value: 120_000 })
     logger(true, "ERROR", 'get sent to wait room, restarting')
     await kill(1001)
   })
-  mc.on('income', () => {
+  bot.on('income', () => {
+    bot.botinfo.balance+=1728
     grinde.bal += 1728
   })
-  mc.on('paid', e => {
+  bot.on('paid', e => {
     grinde.eff.lastmoney -= grinde.bal - e
     grinde.bal = e
   })
   //#新增
-  mc.on("message", async function (jsonMsg) {
-    if (jsonMsg.toString().startsWith(`[`) && jsonMsg.toString().toLowerCase().includes(`您]`)) {  //偵測訊息
-      const msg = (jsonMsg.toString())
-      let args = msg.split(/ +/g);
-      let playerid = args.splice(0, 3)//取得Minecraft ID
-      playerid = playerid[0].slice(1, playerid[0].length);
-      let cmd = args.shift();
-      if (!config.setting.whitelist.includes(playerid)) {
-        mc.chat(`/m ${playerid} ???`);
-        return;
-      }
-      switch (cmd) { //指令前綴} 
-        case 'say':
-          let say = args[0];
-          for (let i = 1; i < args.length; i++) {
-            say += " " + args[i];
-          }
-          mc.chat(say);
-          break
-        case 'money':
-        case 'bal':
-          mc.chat(`/m ${playerid} 當前綠寶石: ${grinde.bal}`);
-          break;
-        case 'payall':
-          mc.chat(`/pay ${playerid} ${grinde.bal}`);
-          break;
-        default:
-          break;
-      }
+  bot.on('dm', async (jsonMsg) => {
+    let args = jsonMsg.toString().split(' ')
+    let playerID = args[0].slice(1, args[0].length);
+    let cmds = args.slice(3, args.length);
+    let isTask = taskManager.isTask(cmds)
+    if (!config.setting.whitelist.includes(playerID)) {
+      logger(true, 'CHAT', jsonMsg.toString())
+      return
     }
-  })//#Mark_end
-  mc.on('kicked', j => {
+    if (isTask.vaild) {
+      let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
+      taskManager.assign(tk, isTask.longRunning)
+      // console.log(taskManager.isImm(cmds))
+    } else {
+      bot.chat(`/m ${playerID} 無效的指令 輸入.help 查看幫助 若要轉發消息使用 say <text>`)
+    }
+    //console.log(jsonMsg.toString())
+    logger(true, 'CHAT', jsonMsg.toString())
+  })
+  bot.on('kicked', j => {
     if (j.includes('this proxy')) process.exitCode = 1100//2
     logger(true, "WARN", `Got kicked. ${j}`)
   })
-  mc.on('error', e => {
-    logger(true, "ERROR", `${e.name}\n${e.message}`)
+  bot.on('error', async (error) => {
+    if (error?.message?.includes('RateLimiter disallowed request')) {
+      process.send({ type: 'setReloadCD', value: 60_000 })
+      process.send({ type: 'setStatus', value: 4 })
+      await kill(1900)
+    } else if (error?.message?.includes('Failed to obtain profile data for')) {
+      process.send({ type: 'setStatus', value: 4 })
+      await kill(1901)
+    } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
+      process.send({ type: 'setStatus', value: 4 })
+      await kill(1902)
+    } else if (error?.message?.includes('read ECONNRESET')) {
+      process.send({ type: 'setStatus', value: 4 })
+      await kill(1903)
+    }
+    console.log('[ERROR]name:\n' + error.name)
+    console.log('[ERROR]msg:\n' + error.message)
+    console.log('[ERROR]code:\n' + error.code)
+    logger(true, 'ERROR', error + '\n' + error.stack);
+    await kill(1000)
   })
 
-  mc.on('end', async () => {
+  bot.on('end', async () => {
     // console.log("end")
     await kill()
   })
 
-  mc._client.on('playerlist_header', () => {
-    botTabhandler(mc.tablist)
-    const header = mc.tablist.header.extra
-    if (!header) return
-    const server = header[header.length - 17]?.text
-    if (!server?.startsWith('分流')) return
-    grinde.onServer = server
-    if (header[header.length - 29]?.text !== '낸') return
-    const bal = parseFloat(header[header.length - 28]?.text.replace(/,/g, ''))
-    if (bal >= 0 && grinde.bal - bal !== 1728 && grinde.bal !== bal) grinde.bal = bal
+  bot._client.on('playerlist_header', () => {
+    botTabhandler(bot.tablist)
+    grinde.bal = bot.botinfo.balance
+    grinde.onServer = bot.botinfo.serverCH
+    //const header = bot.tablist.header.extra
+    // if (!header) return
+    // const server = header[header.length - 17]?.text
+    // if (!server?.startsWith('分流')) return
+    // grinde.onServer = server
+    // if (header[header.length - 29]?.text !== '낸') return
+    // const bal = parseFloat(header[header.length - 28]?.text.replace(/,/g, ''))
+    // if (bal >= 0 && grinde.bal - bal !== 1728 && grinde.bal !== bal) grinde.bal = bal
   })
 
   init()
-  return mc
+  return bot
 })()
 
 process.on('message', async (message) => {
@@ -333,11 +358,11 @@ process.on('message', async (message) => {
       break;
     case 'dataRequire':
       dataRequiredata = {
-        name: mc.username,
+        name: bot.username,
         server: botinfo.server,
         coin: botinfo.coin,
         balance: botinfo.balance,
-        position: mc.entity.position,
+        position: bot.entity.position,
         tasks: taskManager.tasks,
         runingTask: taskManager.tasking
       }
@@ -356,8 +381,8 @@ process.on('message', async (message) => {
       //交給CommandManager
       break;
     case 'chat':
-      mc.chat(message.text)
-      console.log(`已傳送訊息至 ${mc.username}: ${message.text}`);
+      bot.chat(message.text)
+      console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
       break;
     case 'reload':
       process.send({ type: 'setStatus', value: 3002 })
@@ -376,7 +401,7 @@ process.on('message', async (message) => {
   //     await kill()
   //     break
   //   case 'chat':
-  //     try { mc.chat(m.text) } catch (e) {
+  //     try { bot.chat(m.text) } catch (e) {
   //       logger(`${e.name}\n${e.message}`)
   //     }
   //     break
@@ -387,7 +412,7 @@ process.on('message', async (message) => {
   //         logger(`Bal: ${grinde.bal}`)
   //         break
   //       case 'payall':
-  //         if (fcfg.master) mc.chat(`/pay ${fcfg.master} ${grinde.bal}`)
+  //         if (fcfg.master) bot.chat(`/pay ${fcfg.master} ${grinde.bal}`)
   //         break
   //     }
   //     break
@@ -395,7 +420,7 @@ process.on('message', async (message) => {
   //     logger('cmds: bal, payall')
   //     break
   //   case 'xp':
-  //     logger(`Xp: ${mc.experience.level}L (${(mc.experience.progress * 100).toFixed(1)}%) ${mc.experience.points}p`)
+  //     logger(`Xp: ${bot.experience.level}L (${(bot.experience.progress * 100).toFixed(1)}%) ${bot.experience.points}p`)
   //     break
   // }
 })
@@ -403,7 +428,7 @@ process.on('message', async (message) => {
 async function init() {
   while (!grinde.onServer) await timer(500)
   await checkpos(true, true)
-  mc.on(`blockUpdate:(${fcfg.location.clock.join(', ')})`, () => { grinde.clock++; grinde.attackTicker.clock++ })
+  bot.on(`blockUpdate:(${fcfg.location.clock.join(', ')})`, () => { grinde.clock++; grinde.attackTicker.clock++ })
 
   clearInterval(grinde.eff.obj)
   clearTimeout(grinde.eff.obj)
@@ -411,12 +436,12 @@ async function init() {
     if (grinde.status === status.INIT) return
     grinde.clock = 0
     grinde.eff.lastmoney = grinde.bal
-    mc.inventory.items().filter(i => i.type === grinde.ids.item.emerald).forEach(e => { grinde.eff.lastmoney += e.count })
+    bot.inventory.items().filter(i => i.type === grinde.ids.item.emerald).forEach(e => { grinde.eff.lastmoney += e.count })
     grinde.keepalive.refresh()
     grinde.eff.obj = setInterval(() => {
       if (grinde.status === status.INIT) return
       let dmoney = grinde.bal
-      mc.inventory.items().filter(i => i.type === grinde.ids.item.emerald).forEach(e => { dmoney += e.count })
+      bot.inventory.items().filter(i => i.type === grinde.ids.item.emerald).forEach(e => { dmoney += e.count })
       grinde.eff.lastmoney += dmoney -= grinde.eff.lastmoney
       let tps = -1;
       if (grinde.clock > 1714) tps = (20)
@@ -433,7 +458,7 @@ async function init() {
       }
       //logger(`I|E: ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) Clc: ${`${grinde.clock}`.padStart(4, ' ')
       //}`)
-      logger(true, "INFO", `dE ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) [${fcfg.server[1]}] TPS: ${tpsColor}${`${(tps.toFixed(1)).padStart(4, ' ')}`}\x1b[0m bal: ${(grinde.eff.lastmoney.toString()).padStart(8, ' ')}`)
+      logger(true, "INFO", `dE ${`${dmoney}`.padStart(5, ' ')} (${`${dmoney * 6}`.padStart(5, ' ')} e/h) ${`[${fcfg.server[1]}]`.padEnd(4,' ')} TPS: ${tpsColor}${`${(tps.toFixed(1)).padStart(4, ' ')}`}\x1b[0m bal: ${(grinde.eff.lastmoney.toString()).padStart(8, ' ')}`)
       //  [\x1b[32mReport\x1b[0m] 
       if (dmoney > 0) grinde.keepalive.refresh()
       grinde.clock = 0
@@ -474,17 +499,17 @@ async function checkpos(reset = false, force = false) {
   if (!force && grinde.status !== status.IDLE) return
   grinde.status = status.CHECKPOS
 
-  for (let a = 20; grinde.onServer !== fcfg.server[0]; a++) {
+  for (let a = 20; (grinde.onServer!= -1 && grinde.onServer !== fcfg.server[0]); a++) {
     if (a >= 20) {
       logger(true, "WARN", `Incorrect Server! transferring... ${grinde.onServer} -> ${fcfg.server[0]}`)
-      mc.chat(`/ts ${fcfg.server[1]}`)
+      bot.chat(`/ts ${fcfg.server[1]}`)
       a = 0
     }
     await timer(1000)
   }
 
-  const pos = mc.entity.position.offset(0.0, 0.2, 0.0).floor()
-  if (mc.entity.velocity.x === 0 && mc.entity.velocity.z === 0 ?
+  const pos = bot.entity.position.offset(0.0, 0.2, 0.0).floor()
+  if (bot.entity.velocity.x === 0 && bot.entity.velocity.z === 0 ?
     pos.x !== fcfg.location.anchor.x ||
     pos.y !== fcfg.location.anchor.y ||
     pos.z !== fcfg.location.anchor.z :
@@ -498,65 +523,64 @@ async function checkpos(reset = false, force = false) {
         tpc(fcfg.tpcOwner, fcfg.tpcSequence)
         break;
       case "home":
-        logger(true, "INFO", `execute command /homes ${homeName}`)
-        mc.chat(`/homes ${homeName}`)
+        logger(true, "INFO", `execute command /homes ${fcfg.homeName}`)
+        bot.chat(`/homes ${fcfg.homeName}`)
         break;
       default:
         logger(true, "INFO", `execute command /homes e`)
-        mc.chat('/homes e')
+        bot.chat('/homes e')
         break;
     }
     await timer(1000)
   }
 
-  if (Math.abs(mc.entity.yaw - grinde.look.yaw) > 0.1 ||
-    Math.abs(mc.entity.pitch - grinde.look.pitch) > 0.1)
-    mc.look(grinde.look.yaw, grinde.look.pitch, true)
+  if (Math.abs(bot.entity.yaw - grinde.look.yaw) > 0.1 ||
+    Math.abs(bot.entity.pitch - grinde.look.pitch) > 0.1)
+    bot.look(grinde.look.yaw, grinde.look.pitch, true)
 
   if (reset) grinde.status = status.IDLE
 }
 
 function grind() {
   grinde.status = status.GRIND
-
-  let m = mc.nearestEntity(e => e.type === 'mob' && e.metadata[9] > 0 && //Health
+  let m = bot.nearestEntity(e => e.type === 'mob' && e.metadata[9] > 0 && //Health
     grinde.ids.entity.raid.includes(e.entityType) && e.getCustomName()?.toString() != 'a')
-  if (m?.position.distanceSquared(mc.entity.position) < 10) {
+  if (m?.position.distanceSquared(bot.entity.position) < 10) {
     grinde.reraid.refresh()
-    mc.attack(m, false)
+    bot.attack(m, false)
     return
   }
 
-  m = mc.nearestEntity(e => e.type === 'mob' && e.entityType === grinde.ids.entity.vex && e.metadata[9] > 0)
-  if (m?.position.distanceSquared(mc.entity.position) < 10) mc.attack(m, false)
+  m = bot.nearestEntity(e => e.type === 'mob' && e.entityType === grinde.ids.entity.vex && e.metadata[9] > 0)
+  if (m?.position.distanceSquared(bot.entity.position) < 10) bot.attack(m, false)
 }
 
 async function refillTotem() {
   grinde.status = status.REFILL
-  const i = mc.inventory.slots[36]
+  const i = bot.inventory.slots[36]
   if (!i || i.count === 64) return
   if (i.type === grinde.ids.item.totem) {
-    mc.setQuickBarSlot(0)
-    mc.setControlState('sneak', true)
-    mc._client.write('block_dig', {
+    bot.setQuickBarSlot(0)
+    bot.setControlState('sneak', true)
+    bot._client.write('block_dig', {
       status: 0, // start digging
       location: fcfg.location.anchor,
       face: 1 // default face is 1 (top)
     })
     await timer(50)
-    mc._client.write('block_dig', {
+    bot._client.write('block_dig', {
       status: 1, // cancel digging
       location: fcfg.location.anchor,
       face: 1 // default face is 1 (top)
     })
-    mc.setControlState('sneak', false)
-    mc.setQuickBarSlot(1)
+    bot.setControlState('sneak', false)
+    bot.setQuickBarSlot(1)
   }
 }
 
 async function toss() {
   grinde.status = status.TOSS
-  const items = mc.inventory.items()
+  const items = bot.inventory.items()
   const stacks = {
     emerald: 0,
     extra: [],
@@ -566,39 +590,39 @@ async function toss() {
   for (const i of items) {
     //logger(`${i.slot} ${i.type} ${i.name}`)
     if (i.type === grinde.ids.armor.boots) {
-      await mc.equip(i, "feet")
+      await bot.equip(i, "feet")
       logger(true, "INFO", "feet")
       // await timer(500)
       continue
     }
     else if (i.type === grinde.ids.armor.leggings) {
-      await mc.equip(i, "legs")
+      await bot.equip(i, "legs")
       logger(true, "INFO", "legs")
       //await timer(500)
       continue
     }
     else if (i.type === grinde.ids.armor.chestplate) {
-      await mc.equip(i, "torso")
+      await bot.equip(i, "torso")
       logger(true, "INFO", "torso")
       //  await timer(500)
       continue
     }
     else if (i.type === grinde.ids.armor.helmet) {
-      await mc.equip(i, "head")
+      await bot.equip(i, "head")
       logger(true, "INFO", "head")
       // await timer(500)
       continue
     }
     else if (i.slot != 37 && i.type === grinde.ids.armor.sword) {
-      await mc.simpleClick.leftMouse(i.slot)
-      await mc.simpleClick.leftMouse(37)
+      await bot.simpleClick.leftMouse(i.slot)
+      await bot.simpleClick.leftMouse(37)
       logger(true, "INFO", `hand`)
       // await timer(500)
       continue
     }
     if (i.slot === 36 && i.type != grinde.ids.item.totem) {
-      await mc.simpleClick.leftMouse(i.slot)
-      await mc.simpleClick.leftMouse(-999)
+      await bot.simpleClick.leftMouse(i.slot)
+      await bot.simpleClick.leftMouse(-999)
     }
     if ([37, 38].includes(i.slot) || (i.slot === 36 && i.type === grinde.ids.item.totem)) continue
     //這邊要新增穿裝備!!!
@@ -608,8 +632,8 @@ async function toss() {
     else if (i.type === grinde.ids.item.extra) { if (i.count === 64) stacks.extra.push(i.slot) }
     else if (grinde.ids.item.trash.includes(i.type) &&
       !(i.type === grinde.ids.item.crossbow && i.enchants.filter(e => ['piercing', 'multishot'].includes(e.name)).length >= 2)) {
-      await mc.simpleClick.leftMouse(i.slot)
-      await mc.simpleClick.leftMouse(-999)
+      await bot.simpleClick.leftMouse(i.slot)
+      await bot.simpleClick.leftMouse(-999)
     }
     else stacks.else.push(i.slot)
   }
@@ -623,9 +647,9 @@ async function tpc(owner, seq) {
   grinde.status = status.DEPOSIT
   await new Promise(async (res, rej) => {
     const timeout = setTimeout(rej, 15_000)
-    mc.chat(`/tpc ${owner}`)
-    await once(mc, 'windowOpen')
-    await mc.simpleClick.leftMouse(8 + seq)
+    bot.chat(`/tpc ${owner}`)
+    await once(bot, 'windowOpen')
+    await bot.simpleClick.leftMouse(8 + seq)
     clearTimeout(timeout)
     res()
   })
@@ -636,9 +660,9 @@ async function deposit() {
   grinde.status = status.DEPOSIT
   await new Promise(async (res, rej) => {
     const timeout = setTimeout(rej, 15_000)
-    mc.chat('/bank')
-    await once(mc, 'windowOpen')
-    await mc.simpleClick.leftMouse(30)
+    bot.chat('/bank')
+    await once(bot, 'windowOpen')
+    await bot.simpleClick.leftMouse(30)
     clearTimeout(timeout)
     res()
   })
@@ -647,24 +671,24 @@ async function deposit() {
 
 async function intoChest(chest, items) {
   grinde.status = status.CHEST
-  if (chest.distanceSquared(mc.entity.position) > 30) return
+  if (chest.distanceSquared(bot.entity.position) > 30) return
 
   let it = 0
   if (await openChest(chest)) {
-    const offset = mc.currentWindow?.inventoryStart - 9
+    const offset = bot.currentWindow?.inventoryStart - 9
     while (it < items.length) {
-      const slot = mc.currentWindow?.firstEmptyContainerSlot()
+      const slot = bot.currentWindow?.firstEmptyContainerSlot()
       if (!slot && (slot ?? true)) break
-      await mc.simpleClick.leftMouse(offset + items[it++])
-      await mc.simpleClick.leftMouse(slot)
+      await bot.simpleClick.leftMouse(offset + items[it++])
+      await bot.simpleClick.leftMouse(slot)
       await timer(30)
     }
     closeWindow()
   }
 
   while (it < items.length) {
-    await mc.simpleClick.leftMouse(items[it++])
-    await mc.simpleClick.leftMouse(-999)
+    await bot.simpleClick.leftMouse(items[it++])
+    await bot.simpleClick.leftMouse(-999)
   }
 }
 
@@ -672,19 +696,19 @@ async function restockEgg() {
   if (!grinde.doEggRefill) return
   grinde.status = status.REFILL
 
-  const leader = mc.nearestEntity(e => e.type === 'mob' &&
+  const leader = bot.nearestEntity(e => e.type === 'mob' &&
     e.entityType === grinde.ids.entity.capture && e.equipment[5] && e.metadata[9] > 0)
-  if (leader?.position.distanceSquared(mc.entity.position) < 10) {
-    if (mc.inventory.slots[38]?.type !== grinde.ids.item.egg_empty) {
+  if (leader?.position.distanceSquared(bot.entity.position) < 10) {
+    if (bot.inventory.slots[38]?.type !== grinde.ids.item.egg_empty) {
       await openChest(fcfg.location.egg)
 
-      if (mc.currentWindow?.containerCount(grinde.ids.item.egg_pillager) >= 45) {
+      if (bot.currentWindow?.containerCount(grinde.ids.item.egg_pillager) >= 45) {
         grinde.doEggRefill = false
         closeWindow()
         return
       }
 
-      const egg = mc.currentWindow?.findContainerItem(grinde.ids.item.egg_empty)
+      const egg = bot.currentWindow?.findContainerItem(grinde.ids.item.egg_empty)
       if (!egg) {
         grinde.doEggRefill = false
         closeWindow()
@@ -692,51 +716,52 @@ async function restockEgg() {
       }
       const slot = egg.slot
       if (egg.count > 1) {
-        const secslot = mc.currentWindow?.firstEmptyContainerSlot()
+        const secslot = bot.currentWindow?.firstEmptyContainerSlot()
         if (secslot === null) {
           grinde.doEggRefill = false
           closeWindow()
           return
         }
-        await mc.simpleClick.leftMouse(slot)
-        await mc.simpleClick.rightMouse(slot)
-        await mc.simpleClick.leftMouse(secslot)
+        await bot.simpleClick.leftMouse(slot)
+        await bot.simpleClick.rightMouse(slot)
+        await bot.simpleClick.leftMouse(secslot)
       }
-      await mc.simpleClick.leftMouse(slot)
-      await mc.simpleClick.leftMouse(mc.currentWindow.hotbarStart + 2)
-      await mc.simpleClick.leftMouse(slot)
+      await bot.simpleClick.leftMouse(slot)
+      await bot.simpleClick.leftMouse(bot.currentWindow.hotbarStart + 2)
+      await bot.simpleClick.leftMouse(slot)
 
       await timer(30)
       closeWindow()
     }
 
-    const leader = mc.nearestEntity(e => e.type === 'mob' &&
+    const leader = bot.nearestEntity(e => e.type === 'mob' &&
       e.entityType === grinde.ids.entity.capture && e.equipment[5] && e.metadata[9] > 0)
-    if (leader?.position.distanceSquared(mc.entity.position) < 10) {
-      mc.setQuickBarSlot(2)
-      mc._client.write('use_entity', {
+    if (leader?.position.distanceSquared(bot.entity.position) < 10) {
+      bot.setQuickBarSlot(2)
+      bot._client.write('use_entity', {
         target: leader.id,
         mouse: 0, // interact with entity
         sneaking: false,
         hand: 0 // interact with the main hand
       })
-      mc.setQuickBarSlot(1)
+      bot.setQuickBarSlot(1)
     }
     await timer(30)
   }
 }
 
 async function reraid() {
+  console.log("reraid")
   grinde.reraid.refresh()
   if (grinde.status === status.INIT) return
-  if (fcfg.location.anchor.distanceSquared(mc.entity.position) > 5) return
+  if (fcfg.location.anchor.distanceSquared(bot.entity.position) > 5) return
   const temp = grinde.status
   grinde.status = status.RERAID
 
-  if (mc.inventory.slots[38]?.type !== grinde.ids.item.egg_pillager) {
+  if (bot.inventory.slots[38]?.type !== grinde.ids.item.egg_pillager) {
     await openChest(fcfg.location.egg)
 
-    const pegg = mc.currentWindow?.findContainerItem(grinde.ids.item.egg_pillager)
+    const pegg = bot.currentWindow?.findContainerItem(grinde.ids.item.egg_pillager)
     if (!pegg) {
       closeWindow()
       grinde.status = temp
@@ -744,42 +769,42 @@ async function reraid() {
     }
 
     const slot = pegg.slot
-    await mc.simpleClick.leftMouse(slot)
-    await mc.simpleClick.leftMouse(mc.currentWindow.hotbarStart + 2)
-    await mc.simpleClick.leftMouse(slot)
+    await bot.simpleClick.leftMouse(slot)
+    await bot.simpleClick.leftMouse(bot.currentWindow.hotbarStart + 2)
+    await bot.simpleClick.leftMouse(slot)
 
     await timer(30)
     closeWindow()
   }
 
   grinde.doEggRefill = false
-  mc.setQuickBarSlot(2)
+  bot.setQuickBarSlot(2)
   interactBlock(fcfg.location.anchor.offset(0, 2, 0))
-  mc.setQuickBarSlot(1)
+  bot.setQuickBarSlot(1)
   setTimeout(() => { grinde.doEggRefill = true }, 60_000)
   logger(true, "INFO", 'Reraid triggered.')
   grinde.status = temp
 }
 
 async function openChest(pos) {
-  if (!['chest', 'barrel', 'shulker_box'].includes(mc.blockAt(pos)?.name)) return false
+  if (!['chest', 'barrel', 'shulker_box'].includes(bot.blockAt(pos)?.name)) return false
   return new Promise(async res => {
     setTimeout(res, 30_000, false)
     interactBlock(pos)
-    await once(mc, 'windowOpen')
+    await once(bot, 'windowOpen')
     await timer(30)
     res(true)
   })
 }
 
 function closeWindow() {
-  try { mc.closeWindow(mc.currentWindow) } catch (err) { }
+  try { bot.closeWindow(bot.currentWindow) } catch (err) { }
 }
 
 async function kill(code = 1000) {
   //process.send({ type: 'restartcd', value: restartcd })
   logger(true, 'WARN', `exiting in status ${code}`)
-  mc.end()
+  bot.end()
   process.exit(code)
 }
 class Task {
@@ -789,7 +814,7 @@ class Task {
   content = '';
   timestamp = Date.now();
   sendNotification = true;
-  //MC-DM
+  //bot-DM
   minecraftUser = '';
   //DC
   discordUser = null;
@@ -821,132 +846,134 @@ const taskManager = {
   tasks: [],
   err_tasks: [],
   tasking: false,
+  commands: commands,
+  basicCommand: basicCommand,
   //
   tasksort() {
-      this.tasks.sort((a, b) => {
-          if (a.priority === b.priority) {
-              return a.timestamp - b.timestamp;
-          } else {
-              return a.priority - b.priority;
-          }
-      });
+    this.tasks.sort((a, b) => {
+      if (a.priority === b.priority) {
+        return a.timestamp - b.timestamp;
+      } else {
+        return a.priority - b.priority;
+      }
+    });
   },
   async init() {
-      bot.taskManager = this;
-      if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
-          this.save()
-      } else {
-          try{
-              let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
-              this.tasks = tt.tasks
-              this.err_tasks = tt.err_tasks
-          }catch(e){
-              await this.save()
-          }
-  
+    bot.taskManager = this;
+    if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
+      this.save()
+    } else {
+      try {
+        let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
+        this.tasks = tt.tasks
+        this.err_tasks = tt.err_tasks
+      } catch (e) {
+        await this.save()
       }
-      //console.log(`task init complete / ${this.tasks.length} tasks now`)
-      //自動執行
-      if (this.tasks.length != 0 && !this.tasking) {
-          logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
-          await sleep(3000)
-          //await this.loop()
-      }
+
+    }
+    //console.log(`task init complete / ${this.tasks.length} tasks now`)
+    //自動執行
+    if (this.tasks.length != 0 && !this.tasking) {
+      logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
+      await wait(3000)
+      //await this.loop()
+    }
   },
   isTask(args) {
-      let result
-      for (let fc = 0; fc < commands.length && !result; fc++) {
-          if (commands[fc].identifier.includes(args[0])) {
-              for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
-                  let args2 = args.slice(1, args.length)[0];
-                  if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
-                      result = commands[fc].cmd[cmd_index];
-                  }
-              }
-              if (!result) {
-                  result = commands[fc].cmdhelper
-              }
+    let result
+    for (let fc = 0; fc < commands.length && !result; fc++) {
+      if (commands[fc].identifier.includes(args[0])) {
+        for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+          let args2 = args.slice(1, args.length)[0];
+          if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+            result = commands[fc].cmd[cmd_index];
           }
+        }
+        if (!result) {
+          result = commands[fc].cmdhelper
+        }
       }
-      if (!result) {
-          for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
-              //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
-              if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
-                  result = basicCommand.cmd[cmd_index];
-              }
-          }
+    }
+    if (!result) {
+      for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+        //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+        if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+          result = basicCommand.cmd[cmd_index];
+        }
       }
-      if (!result) result = { vaild: false };
-      return result
-      //return false
+    }
+    if (!result) result = { vaild: false };
+    return result
+    //return false
   },
   async execute(task) {
-      logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
-      let args = task.content
-      //console.log(task)
-      if (task.source == 'console') task.console = logger;
-      let result
-      for (let fc = 0; fc < commands.length && !result; fc++) {
-          if (commands[fc].identifier.includes(args[0])) {
-              for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
-                  let args2 = args.slice(1, args.length)[0];
-                  if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
-                      result = commands[fc].cmd[cmd_index];
-                  }
-              }
-              if (!result) {
-                  result = commands[fc].cmdhelper
-              }
+    logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
+    let args = task.content
+    //console.log(task)
+    if (task.source == 'console') task.console = logger;
+    let result
+    for (let fc = 0; fc < commands.length && !result; fc++) {
+      if (commands[fc].identifier.includes(args[0])) {
+        for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
+          let args2 = args.slice(1, args.length)[0];
+          if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+            result = commands[fc].cmd[cmd_index];
           }
+        }
+        if (!result) {
+          result = commands[fc].cmdhelper
+        }
       }
-      if (!result) {
-          for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
-              //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
-              if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
-                  result = basicCommand.cmd[cmd_index];
-              }
-          }
+    }
+    if (!result) {
+      for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
+        //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
+        if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+          result = basicCommand.cmd[cmd_index];
+        }
       }
-      if (result.vaild != true) {
-          console.log(task)
-          logger(true, 'ERROR', `task ${task.displayName} not found`)
-          return
-      }
-      await result.execute(task)
-      logger(true, 'INFO', `task ${task.displayName} completed`)
+    }
+    if (result.vaild != true) {
+      console.log(task)
+      logger(true, 'ERROR', `task ${task.displayName} not found`)
+      return
+    }
+    await result.execute(task)
+    logger(true, 'INFO', `task ${task.displayName} completed`)
   },
   async assign(task, longRunning = true) {
-      if (longRunning) {
-          logger(true,'INFO',"解析到長時間指令 以新增到列隊")
-          this.tasks.push(task)
-         // if (!this.tasking) await this.loop()
-      } else {
-          this.execute(task)
-      }
+    if (longRunning) {
+      logger(true, 'INFO', "解析到長時間指令 以新增到列隊")
+      this.tasks.push(task)
+      if (!this.tasking) await this.loop()
+    } else {
+      this.execute(task)
+    }
   },
   async loop() {
-      if (this.tasking) return
-      this.tasking = true;
-      this.tasksort()
-      let crtTask = this.tasks[0]
-      if (login) await this.save();
-      await this.execute(crtTask)
-      this.tasks.shift()
-      if (login) await this.save();
-      this.tasking = false;
-      if (this.tasks.length) await this.loop()
+    if (this.tasking) return
+    this.tasking = true;
+    this.tasksort()
+    let crtTask = this.tasks[0]
+    if (login) await this.save();
+    await this.execute(crtTask)
+    this.tasks.shift()
+    if (login) await this.save();
+    this.tasking = false;
+    if (this.tasks.length) await this.loop()
   },
   async save() {
-      let data = {
-          'tasks': this.tasks,
-          'err_tasks': this.err_tasks,
-      }
-      // console.log('tasks saving..')
-      // console.log(data)
-      await fsp.writeFile(`${process.cwd()}/config/${process.argv[2]}/task.json`, JSON.stringify(data, null, '\t'), function (err, result) {
-          if (err) console.log('tasks save error', err);
-      });
-      //console.log('task complete')
+    let data = {
+      'tasks': this.tasks,
+      'err_tasks': this.err_tasks,
+    }
+    // console.log('tasks saving..')
+    // console.log(data)
+    await fsp.writeFile(`${process.cwd()}/config/${process.argv[2]}/task.json`, JSON.stringify(data, null, '\t'), function (err, result) {
+      if (err) console.log('tasks save error', err);
+    });
+    //console.log('task complete')
   }
   // commit(task) {
   //     this.eventl.emit('commit', task);
@@ -983,7 +1010,7 @@ function logger(logToFile = false, type = "INFO", ...args) {
 }
 
 function interactBlock(pos) {
-  mc._client.write('block_place', {
+  bot._client.write('block_place', {
     location: pos,
     direction: 1,
     hand: 0,
@@ -1029,7 +1056,7 @@ function botTabhandler(tab) {
     }
   }
   if (balanceIdentifier != -1) {
-    bal = parseFloat(header[balanceIdentifier + 3]?.text.replace(/,/g, ''));
+    bal = parseFloat(header[balanceIdentifier + 2]?.text.replace(/,/g, ''));
     if (bal != NaN) {
       botinfo.balance = bal
       bi = true;

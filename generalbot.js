@@ -76,7 +76,7 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
     fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
 }
-process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :10_000})
+process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
 process.send({ type: 'setStatus', value: 3001 })
 const botinfo = {
     server: -1,
@@ -95,6 +95,16 @@ const bot = (() => { // createMcBot
         version: "1.18.2"
     })
     const ChatMessage = require('prismarine-chat')("1.18.2")
+    if(debug){
+        bot.on("windowOpen",async (window)=>{
+            //console.log(window)
+            // console.log(window.title)
+            // for(i in window.slots){
+            //     if(!window.slots[i]) continue
+            //     else console.log(`${window.slots[i].slot} ${window.slots[i].name} ${window.slots[i].displayName}`)
+            // }
+        })
+    }
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}`)
         bot.gkill = kill;
@@ -107,8 +117,8 @@ const bot = (() => { // createMcBot
             await commands[c].init(bot, process.argv[2], logger);
         }
         bot._client.write('client_command', { payload: 0 })     //fix death bug
-        process.send({ type: 'setStatus', value: 3200 })
-        process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :10_000})
+        process.send({ type: 'setStatus', value: 3201 })
+        process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
             'dm'
@@ -167,13 +177,17 @@ const bot = (() => { // createMcBot
     bot.on('error', async (error) => {
         if (error?.message?.includes('RateLimiter disallowed request')) {
             process.send({ type: 'setReloadCD', value: 60_000 })
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1900)
         } else if (error?.message?.includes('Failed to obtain profile data for')) {
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1901)
         } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1902)
         } else if (error?.message?.includes('read ECONNRESET')) {
-            await kill(1000)
+            process.send({ type: 'setStatus', value: 4 })
+            await kill(1903)
         }
         console.log('[ERROR]name:\n' + error.name)
         console.log('[ERROR]msg:\n' + error.message)
@@ -208,7 +222,8 @@ const bot = (() => { // createMcBot
 
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
-    logger(true, 'WARN', `exiting in status ${code}`)
+    //logger(true, 'WARN', `exiting in status ${code}`)
+    process.send({ type: 'setStatus', value: 4 })
     bot.end()
     process.exit(code)
 }
@@ -397,6 +412,7 @@ const taskManager = {
     async loop() {
         if (this.tasking) return
         this.tasking = true;
+        process.send({ type: 'setStatus', value: 3202 })
         this.tasksort()
         let crtTask = this.tasks[0]
         if (login) await this.save();
@@ -404,6 +420,7 @@ const taskManager = {
         this.tasks.shift()
         if (login) await this.save();
         this.tasking = false;
+        process.send({ type: 'setStatus', value: 3201 })
         if (this.tasks.length) await this.loop()
     },
     async save() {
@@ -458,7 +475,7 @@ function botTabhandler(tab) {
         }
     }
     if (balanceIdentifier != -1) {
-        bal = parseFloat(header[balanceIdentifier + 3]?.text.replace(/,/g, ''));
+        bal = parseFloat(header[balanceIdentifier + 2]?.text.replace(/,/g, ''));
         if (bal != NaN) {
             botinfo.balance = bal
             bi = true;

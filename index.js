@@ -275,7 +275,16 @@ rl.on('line', async (input) => {
                 console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
                 break;
             default:
-                cs.c.send({ type: "cmd", text: input });
+                if (cs == -1 || cs == undefined) {
+                    console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
+                } else if (cs.c == undefined && cs.status == 0) {
+                    console.log(`該 bot 未啟動 use .switch to select a bot`);
+                } else if (cs.c == undefined) {
+                    console.log(`該 bot 不再線上請稍後在試`);
+        
+                } else {
+                    cs.c.send({ type: "cmd", text: input });
+                }
                 //console.log(`unknown command '${rlCommandName.substring(1)}'`);
                 break;
         }
@@ -425,7 +434,7 @@ client.on('interactionCreate', async (interaction) => {
                 return
                 let botinfo = await bots.getBotInfo(targetBot)
                 interaction.reply(generateRaidBotControlMenu(botinfo))
-            } else if (targetBotIns.status == 3200) {
+            } else if (targetBotIns.status >= 3200) {
                 let botinfo = await bots.getBotInfo(targetBot)
                 interaction.reply(generateGeneralBotControlMenu(botinfo))
                 return
@@ -481,17 +490,18 @@ process.on('uncaughtException', err => {
 process.on('SIGINT', handleClose);
 process.on('SIGTERM', handleClose);
 console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
-logToFileAndConsole("INFO", "CONSOLE", `Bot Start`);
-
+//logToFileAndConsole("INFO", "CONSOLE", "\nBy using the software, you are agreeing to be bound by the terms of EULA");
+logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
 client.login(config.discord_setting.token)
 main()
 function main() {
     console.log(config.account.id)
     currentSelect = 0;
     process.title = '[Bot][-1] type .switch to select a bot';
-    let timerdelay = 5;
+    let timerdelay = 3005;
     //get type  and set of all bot
     // type: auto raid general
+    //sleep(5000)
     for (i in config.account) {
         //console.log(config.account[i])
     }
@@ -585,6 +595,7 @@ function createBot(name) {
     })
     child.send({ type: 'init', config: config })
     child.on('close', c => {
+        logToFileAndConsole('WARN', name,`Exit code: ${exitcode[c]} (${c})`)
         child.removeAllListeners()
         bots.setBot(name, undefined)
         if (c == 0) console.log(`${name}: stopped success`)
@@ -860,7 +871,7 @@ function generateGeneralBotControlMenuEmbed(botinfo) {
             { name: `:pencil:任務列隊 ${'-'} / ${botinfo.tasks.length} PAGE ${'-'}`, value: taskQueue },
         )
         .setTimestamp()
-        .setFooter({ text: 'TEXXXTTTT', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+        .setFooter({ text: 'One For All', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
 //Raid Bot Control Menu
@@ -896,6 +907,9 @@ async function notImplemented(interaction) {
         ephemeral: true
     })
 }
+/**
+ * 這裡一定要改 linux 只支持0-255
+ */
 const exitcode = {
     0: 'success',
     1: 'general error',
@@ -903,11 +917,13 @@ const exitcode = {
     1000: 'unknown error',
     1001: 'server reload',
     1002: 'client reload',
+    1402: 'raid (keepalive)',
     1003: 'proxy server restarting',
     1004: 'client error reload',
     1900: 'RateLimiter disallowed request',
     1901: 'Failed to obtain profile data',
-    1902: 'FetchError: read ECONNRESET',
+    1902: 'FetchError: read ECONNRESET(Mojang)',
+    1903: 'FetchError: read ECONNRESET',
     //  不可重啟類
     2001: 'config not found',
     2002: 'config err',
@@ -918,6 +934,7 @@ const botstatus = {
     1: 'free',
     2: 'in tasking',
     3: 'raid',
+    4: 'wait Reload CoolDown',
     100: 'proxy server restarting',
     1000: 'Closed(Profile Not Found)',
     1001: 'Closed(Type Not Found)',
@@ -925,6 +942,7 @@ const botstatus = {
     2000: 'raid - closed', //unused
     2001: 'Restarting',
     2200: 'Running',
+    2201: 'Running(Raid)',
     2401: 'Closed(RaidFarm Not Found)',
     //  General 區
     3000: 'general - closed',   //unused
@@ -932,6 +950,8 @@ const botstatus = {
     3001: 'Logging in',
     3002: 'Restarting',
     3200: 'Running',
+    3201: 'Running(Idle)',
+    3202: 'Running(Tasking)',
 
     //    process.send({ type: 'setStatus', value: 1000 })
 };
