@@ -1,6 +1,7 @@
 const fs = require('fs');
 const fsp = require('fs').promises
 const crypto = require('crypto');
+const { Vec3 } = require('vec3')
 const { once } = require('events')
 const containerOperation = require(`../lib/containerOperation`);
 const mcFallout = require(`../lib/mcFallout`);
@@ -20,6 +21,26 @@ const basicCommand = {
             execute: cmd_test,
             vaild: true,
             longRunning: true,
+            permissionRequre: 0,
+        },
+        {
+            name: "interact",
+            identifier: [
+                "interact"
+            ],
+            execute: cmd_interact,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {
+            name: "click the window",
+            identifier: [
+                "click"
+            ],
+            execute: cmd_click,
+            vaild: true,
+            longRunning: false,
             permissionRequre: 0,
         },
         {
@@ -536,6 +557,27 @@ async function cmd_getTopRaidServers(task) {
     }
     try { bot.closeWindow(bot.currentWindow) } catch (err) { }
     //  /stats 綠寶石拾起
+}
+async function cmd_click(task){
+    let id = parseInt(task.content[1]);
+    console.log(id)
+    await bot.simpleClick.leftMouse(id)
+}
+async function cmd_interact(task){
+    let x = parseInt(task.content[1]);
+    let y = parseInt(task.content[2]);
+    let z = parseInt(task.content[3]);
+    let p = new Vec3(x,y,z)
+    console.log(p)
+    bot._client.write('block_place', {
+        location: p,
+        direction: 1,
+        hand: 0,
+        cursorX: 0.5,
+        cursorY: 0.5,
+        cursorZ: 0.5,
+        insideBlock: false
+      })
 }
 async function taskreply(task, mc_msg, console_msg, discord_msg) {
     switch (task.source) {
