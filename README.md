@@ -1,13 +1,16 @@
-# Bot2
+# One For All 
 
 Minecraft Bot for McFallout server.
-~~想不到好名字~~ 
+
 
 ## Contribute
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
 ## Tutorial
-    - [Usage](/LICENSE)]
-    - [MIT](/LICENSE)
+- [Usage](/LICENSE)]
+- [TEST0](/TEST)
+- [TEST1](/TEST)
+- [TEST2](/TEST)
+- [TEST3](/TEST)
 ## Features
 ### Current
 * Discord
@@ -36,7 +39,10 @@ Minecraft Bot for McFallout server.
 * MC-Feature
     1. Mapart (舊的過太久 看不懂了qq)
     2. Clear Area
-    3. Villager Trading 
+    3. Villager Trading
+### 已知錯誤
+    Discord Fetch Error 時，會重複發送dc面板
+    還沒init 完成時 使用某些指令會抱錯
 --- 
 ## Develop
 
