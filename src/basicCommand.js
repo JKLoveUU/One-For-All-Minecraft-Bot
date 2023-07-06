@@ -102,6 +102,17 @@ const basicCommand = {
             permissionRequre: 0,
         },
         {
+            name: "Emerald Withdraw",
+            identifier: [
+                "payall",
+                "withdraw"
+            ],
+            execute: cmd_payall,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {
             name: "Balance Query",
             identifier: [
                 "balance",
@@ -326,6 +337,17 @@ async function cmd_playerlist(task) {
     plist.sort();
     console.log(plist)
 }
+async function cmd_payall(task) {
+    switch (task.source) {
+        case 'minecraft-dm':
+            bot.chat(`/pay ${task.minecraftUser} ${bot.botinfo.balance}`);
+            logger(true, "INFO", `${task.minecraftUser} withdraw ${bot.botinfo.balance}`)
+            break;
+        default:
+            console.log("限定使用私訊")
+            break;
+        }
+}
 async function cmd_info(task) {
     let binfo = "";
     let currentPostion = bot.entity.position;
@@ -502,13 +524,21 @@ async function cmd_getTopRaidServers(task) {
             console.log("等待開啟統計")
             await once(bot, 'windowOpen')
             if (!fail) {
-                await sleep(3000)
+                await sleep(50)
                 let wd = bot.currentWindow
                 // console.log(wd)
                 // console.log(wd.title)
                 if (!wd.title.includes("綠寶石 拾起數量")) {
                     rej("錯誤menu")
                 }
+                let tt = Date.now()
+                while(wd.slots[9]==null){
+                    if(Date.now()-tt>10000){
+                        rej(" 綠寶石 拾起數量 timeout")
+                    }
+                    await sleep(50)
+                }
+                //await sleep(3000)
                 for (slot of wd.slots) {
                     if (!slot) continue
                     if (slot.slot < 9) continue
@@ -542,7 +572,7 @@ async function cmd_getTopRaidServers(task) {
         console.log(e)
         //console.log("傳送失敗")
     }
-    if (!fail) {
+    if (!fail&&tgPlayerList.length>0) {
         let playerServer_Result = await mcFallout.getPlayerServer(bot, tgPlayerList);
         for (idx in tgPlayerList) {
             let server = "-";
