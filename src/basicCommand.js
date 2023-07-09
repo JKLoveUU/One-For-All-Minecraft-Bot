@@ -155,7 +155,7 @@ const basicCommand = {
             ],
             execute: cmd_throwall,
             vaild: true,
-            longRunning: true,
+            longRunning: false,
             permissionRequre: 0,
         },
         {
@@ -545,10 +545,10 @@ async function cmd_getTopRaidServers(task) {
                     //console.log(slot)
                     if (slot.name == 'player_head') {
                         //console.log(slot.nbt.value.display.value.Lore.value.value)
-                        let nameJson = JSON.parse(slot.nbt.value.display.value.Name.value)
+                        let nameJson = JSON.parse(slot?.nbt?.value?.display?.value?.Name?.value)
                         let pname = nameJson.extra.filter(item => item.color === "white" && item.text.trim().length > 0).map(item => item.text.trim())[0];
                         tgPlayerList.push(pname)
-                        let em_match = slot.nbt.value.display.value.Lore.value.value[0].match(/"text":"(\d+) "/g);
+                        let em_match = slot?.nbt?.value?.display?.value?.Lore?.value?.value[0].match(/"text":"(\d+) "/g);
                         // console.log(em_match)
                         if (em_match) {
                             var number = parseInt(em_match[1].match(/"text":"(\d+) "/)[1], 10);

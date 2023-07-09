@@ -9,12 +9,14 @@ const sd = require('silly-datetime');
 const nbt = require('prismarine-nbt')
 const promisify = f => (...args) => new Promise((resolve, reject) => f(...args, (err, res) => err ? reject(err) : resolve(res)))
 const parseNbt = promisify(nbt.parse);
+const { WebhookClient } = require('discord.js');
 const pTimeout = require('p-timeout');
 const containerOperation = require(`../lib/containerOperation`);
 const mcFallout = require(`../lib/mcFallout`);
 const pathfinder = require(`../lib/pathfinder`);
 const schematic = require(`../lib/schematic`);
 const litematicPrinter = require('../lib/litematicPrinter');
+const station = require('../lib/station');
 const console = require('console');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const wait = () => new Promise(setImmediate)
@@ -68,14 +70,14 @@ let mapart_cfg = {
     "station": "mpStation_Example.json",
     "open": {
         "folder": "暫時用不到",
-        "warp": "JKLoveJK_10",
+        "warp": "Example_10",
         "height": 9,
         "width": 6,
         "open_start": -1,
         "open_end": -1,
     },
     "wrap": {    // 分裝 命名 複印用的設定
-        "warp": "JKLoveJK_10",
+        "warp": "Example_10",
         "height": 9,
         "width": 6,
         "origin": [0, 0, 0],
@@ -96,8 +98,7 @@ let mapart_cfg = {
 }
 let mapart_global_cfg = {
     "schematic_folder": "C:/Users/User/AppData/Roaming/.minecraft/schematics/",
-    "dc_webhookToken": "",
-    "dc_webhookId": "",
+    "discord_webhookURL": "https://discord.com/api/webhooks/1234567890123456789/abc",
     replaceMaterials: []
 }
 const mapart = {
@@ -311,72 +312,373 @@ async function mp_set(task) {
 }
 async function mp_info(task) {
     let mapart_info_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
-    let stationConfig;
-    let materialsMode = mapart_info_cfg_cache.materialsMode;
-    if (materialsMode == 'station') {
-        stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_info_cfg_cache.station}`);
-    } else {
-        await notImplemented(task)
-        return
+    //console.log(mapart_info_cfg_cache)
+    let lppq = await litematicPrinter.progress_query(task, bot)
+    //console.log(lppq)
+    let prog = ((lppq.placedBlock/lppq.totalBlocks)*100).toFixed(1)
+
+    switch (task.source) {
+        case 'minecraft-dm':
+            bot.chat(`/m ${task.minecraftUser} ${mapart_info_cfg_cache.schematic.filename} ${prog}%`);
+            break;
+        case 'console':
+            console.log(`${mapart_info_cfg_cache.schematic.filename} ${prog}%`)
+            break;
+        case 'discord':
+            console.log(`Discord Reply not implemented ${discord_msg}`);
+            break;
+        default:
+            break;
     }
-    console.log(mapart_info_cfg_cache)
-    await litematicPrinter.progress_query(task,bot)
 }
 async function mp_build(task) {
     let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
     mapart_build_cfg_cache.schematic.folder = mapart_global_cfg.schematic_folder;
     mapart_build_cfg_cache.bot_id = bot_id
-    if(false){  //check args
-
-    }
+    mapart_build_cfg_cache.replaceMaterials = mapart_global_cfg.replaceMaterials
+    mapart_build_cfg_cache.server = bot.botinfo.server
+    //這裡還要注入flag -s id
     delete mapart_build_cfg_cache.open;
     delete mapart_build_cfg_cache.wrap;
-    await litematicPrinter.build_file(task,bot,litematicPrinter.model_mapart,mapart_build_cfg_cache)
-    if(false){  //check args to build next ?
+    //Flag parse
+    //check args
+    //console.log(task)
+    //console.log(mapart_build_cfg_cache)
+    let FLAG_autonext = false           //蓋到某張 或 沒有檔案為止
+    let FLAG_autonext_value = ''
+    let FLAG_server = false
+    let FLAG_serverValue = bot.botinfo.server
+    let FLAG_disableWebHookNotification = false
+    let auto_regex = /^(\d+)_(\d+)$/;
+    for (let i = 0; i < task.content.length; i++) {
+        if (!task.content[i].startsWith('-')) continue
+        switch (task.content[i]) {
+            case '-a':
+            case '-auto':
+                FLAG_autonext = true;
+                const match = task.content[i + 1]?.match(auto_regex);
+                if (match) {
+                    FLAG_autonext_value = task.content[i + 1];
+                    i++;
+                    //console.log(match);
+                }
+                break;
+            case '-s':
+            case '-server':
+                if (Number.isInteger(parseInt(task.content[i + 1]))) {
+                    FLAG_server = true;
+                    FLAG_serverValue = parseInt(task.content[i + 1]);
+                    i++;
+                } else {
+                    console.log(`-s 缺少分流參數`);
+                    return
+                }
+                break;
+            case '-n':
+                FLAG_disableWebHookNotification = true;
+                break;
+            default:
+                break;
+        }
+    }
+    if (FLAG_server) mapart_build_cfg_cache.server = FLAG_serverValue
+    if (mapart_build_cfg_cache.server == -1) {
+        console.log(`&7${mapart_build_cfg_cache.server} TAB 分流讀取失敗 請重試`)
+        return
+    }
+    //try {
+    await litematicPrinter.build_file(task, bot, litematicPrinter.model_mapart, mapart_build_cfg_cache)
+    //let pq = await litematicPrinter.progress_query(task, bot)
+    //console.log(pq)
+    // send analysis
+    let build_result_query = await litematicPrinter.progress_query(task, bot)
+    console.log(build_result_query)
+    mapartBuildUseTime = (build_result_query.endTime - build_result_query.startTime) / 1000
+    console.log(`消耗時間 ${parseInt((mapartBuildUseTime / 3600))} h ${parseInt((mapartBuildUseTime % 3600) / 60)} m ${parseInt(mapartBuildUseTime % 60)} s`)
 
-    }
-    return
-    //get cache here
-    let currentMPCFG_Hash = await get_hash_cfg(mapart_build_cfg_cache.schematic);
-    if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)) {
-        save_cache(mapart_cache)
-    } else {
-        mapart_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart_cache.json`)
-    }
-    console.log(`hash\n${mapart_cache.hash}\n${currentMPCFG_Hash}`)
-    let parse_startTime = Date.now();
-    let sch = await schematic.loadFromFile(mapart_global_cfg.schematic_folder + mapart_build_cfg_cache.schematic.filename)
-    let parse_endTime = Date.now();
-    console.log(mapart_cache)
-    //console.log(sch)
-    console.log(`解析時間 ${parse_endTime - parse_startTime} ms`)
-    // console.log(sch.litematicaBitArray.getAt(sch.index(0, 1, 1)))
-    if (mapart_cache.hash != currentMPCFG_Hash) {
-        console.log("為發現就資料")
-        //重新蓋
-    }
-    //繼續蓋
-    await mapartbuild();
-    async function mapartbuild() {
-        whetherBuild = true, whetherPause = false, stop = false;
-        let blockCD = [];
-        let placeRateLimit = 0;
-        let currentBlock = 0;   //當前INDEX
-        let currentBlocks = [];         //當前palette的所有方塊                 (偽Index)		
-        let currentBlocksRealIndex = [] //當前palette的所有方塊在blocks的Index  (實Index)	
-    }
+    // } catch (e) {
+    //     console.log(e)
+    // }
 
+    const f_reg = /_(\d+)_(\d+)$/;
+    let crt_filename_sp = mapart_build_cfg_cache.schematic.filename.split(".")
+    //console.log(crt_filename_sp)
+    let crt_filename = crt_filename_sp[0];
+    const crt_filename_type = crt_filename_sp[1];
+    let crt_filename_match = crt_filename.match(f_reg)
+    crt_filename = crt_filename.replace(/_\d+_\d+$/, '');
+    let crtFileIndex
+    const webhookClient = new WebhookClient({ url: mapart_global_cfg.discord_webhookURL });
+    if (crt_filename_match) {
+        crtFileIndex = [parseInt(crt_filename_match[1]), parseInt(crt_filename_match[2])]
+    }
+    if (!FLAG_disableWebHookNotification) {
+        let mapartfinishEmbed = gen_mapartFinishEmbed();
+        let wh = {
+            //content: '',//`<@${mapart_settings.dc_tag}>`,
+            username: bot.username,
+            avatarURL: `https://mc-heads.net/avatar/${bot.username}`,
+            embeds: [mapartfinishEmbed]
+        };
+        if(true||bot.debugMode){
+            wh.embeds.push({
+                color: 0x0099ff,
+                title: `除錯資料`,
+                //url: 'https://discord.js.org',
+                // author: {
+                //     name: bot.username,
+                //     icon_url: iconurl,
+                //     //url: 'https://discord.js.org',
+                // },
+                //description: `\`${crt_filename}\``,
+                // thumbnail: {
+                //     url: iconurl,
+                // },
+                fields: [
+                    // {
+                    // 	name: '\u200b',
+                    // 	value: '\u200b',
+                    // 	inline: false,
+                    // },
+					{
+						name: '放置成功率',
+						value: `${((build_result_query.totalBlocks / build_result_query.debug.placeCount) * 100).toFixed(1)}% (${build_result_query.totalBlocks} / ${build_result_query.debug.placeCount})`,
+					},
+                    {
+                        name: '材料補充次數',
+                        value: `${build_result_query.debug.restock_count}`,
+                        inline: true
+                    },
+                    {
+                        name: '材料補充耗時',
+                        value: `${(build_result_query.debug.restock_takeTime/1000).toFixed(1)} 秒`,
+                        inline: true
+                    },
+                    {
+                        name: 'FindNext 耗時',
+                        value: `${(build_result_query.debug.findNextTotalCounter/1000).toFixed(1)} 秒`,
+                        inline: false
+                    },
+                ],
+            })
+        }
+        webhookClient.send(wh)
+    }
+    if (FLAG_autonext) {  //check args to build next ?
+        let autonext_stopAt
+        if (FLAG_autonext_value) {
+            const autonext_match = FLAG_autonext_value.match(auto_regex);
+            autonext_stopAt = [parseInt(autonext_match[1]), parseInt(autonext_match[2])]
+        }
+        //console.log(autonext_stopAt)
+        let matchStop = false //有界 碰界 沒下張 //!FLAG_autonext_value
+        if (!crtFileIndex) matchStop = true
+        let nextFileName
+        if (!matchStop && FLAG_autonext_value && autonext_stopAt[0] == crtFileIndex[0] && autonext_stopAt[1] == crtFileIndex[1]) matchStop = true;  //碰界
+        if (!matchStop) {  //get next index  沒下張
+            // console.log(`${mapart_build_cfg_cache.schematic.folder}${crt_filename}_${crtFileIndex[0]}_${crtFileIndex[1] + 1}.${crt_filename_type}`)
+            // console.log(`${mapart_build_cfg_cache.schematic.folder}${crt_filename}_${crtFileIndex[0] + 1}_0.${crt_filename_type}`)
+            if (fs.existsSync(`${mapart_build_cfg_cache.schematic.folder}${crt_filename}_${crtFileIndex[0]}_${crtFileIndex[1] + 1}.${crt_filename_type}`)) {
+                nextFileName = `${crt_filename}_${crtFileIndex[0]}_${crtFileIndex[1] + 1}.${crt_filename_type}`;
+            } else if (fs.existsSync(`${mapart_build_cfg_cache.schematic.folder}${crt_filename}_${crtFileIndex[0] + 1}_0.${crt_filename_type}`)) {
+                nextFileName = `${crt_filename}_${crtFileIndex[0] + 1}_0.${crt_filename_type}`;
+            }
+            if (!nextFileName) matchStop = true;
+        }
+        // const crt_index =
+        if (matchStop) {
+            let mapartAutofinishEmbed = gen_mapartAutoFinishEmbed()
+            webhookClient.send({
+                // content: '',//`<@${mapart_settings.dc_tag}>`,
+                 username: bot.username,
+                 avatarURL: `https://mc-heads.net/avatar/${bot.username}`,
+                 embeds: [mapartAutofinishEmbed],
+             })
+            //send all finsih webhook
+        } else {
+            let nextV3 = [
+                mapart_build_cfg_cache.schematic.placementPoint_x,
+                mapart_build_cfg_cache.schematic.placementPoint_y,
+                mapart_build_cfg_cache.schematic.placementPoint_z
+            ]
+            nextV3[0] += 128;
+            let nextSetTask = {
+                priority: bot.taskManager.defaultPriority - 2,
+                displayName: '地圖畫 設定 (自動下張)',
+                source: task.source,
+                content: ['mapart', 'set', nextFileName, nextV3[0].toString(), nextV3[1].toString(), nextV3[2].toString()],
+                timestamp: Date.now(),
+                sendNotification: task.sendNotification,
+                minecraftUser: task.minecraftUser,
+                discordUser: task.discordUser
+            }
+            bot.taskManager.assign(nextSetTask)
+            //console.log(nextSetTask)
+            //await sleep(50)
+            let nextBuildArgs = task.content
+            if (!FLAG_server) {
+                nextBuildArgs.push('-s')
+                nextBuildArgs.push(FLAG_serverValue.toString())
+            }
+            let nextBuildTask = {
+                priority: bot.taskManager.defaultPriority - 1,
+                displayName: '地圖畫 建造(自動下張)',
+                source: task.source,
+                content: nextBuildArgs,
+                timestamp: Date.now(),
+                sendNotification: task.sendNotification,
+                minecraftUser: task.minecraftUser,
+                discordUser: task.discordUser
+            }
+            // console.log(nextBuildTask)
+            bot.taskManager.assign(nextBuildTask)
+            // build next ;
+        }
+        return
+    }
+    function gen_mapartAutoFinishEmbed(){
+        let iconurl = `https://mc-heads.net/avatar/${bot.username}`
+        let mapartfinishEmbed = {
+            color: 0x0099ff,
+            title: `已全數蓋完`,
+            //url: 'https://discord.js.org',
+            author: {
+                name: bot.username,
+                icon_url: iconurl,
+                //url: 'https://discord.js.org',
+            },
+            description: `\`${crt_filename}\``,
+            thumbnail: {
+                url: iconurl,
+            },
+            fields: [
+                // {
+                // 	name: '\u200b',
+                // 	value: '\u200b',
+                // 	inline: false,
+                // },
+                {
+                    name: '分流',
+                    value: `${build_result_query.server}`,
+                    inline: true,
+                },
+                {
+                    name: '材料站',
+                    value: `${'-'}`,
+                    inline: true,
+                },
+                {
+                    name: '完成時間',
+                    value: `<t:${parseInt(build_result_query.endTime/1000)}:f>`,
+                    inline: false
+                },
+            ],
+        }
+        return mapartfinishEmbed;
+    }
+    function gen_mapartFinishEmbed(){
+        let iconurl = `https://mc-heads.net/avatar/${bot.username}`
+        let mapartfinishEmbed = {
+            color: 0x0099ff,
+            title: `${mapart_build_cfg_cache.schematic.filename} 建造完成`,
+            //url: 'https://discord.js.org',
+            author: {
+                name: bot.username,
+                icon_url: iconurl,
+                //url: 'https://discord.js.org',
+            },
+            //description: `\`${mapart_build_cfg_cache.schematic.filename}\``,
+            thumbnail: {
+                url: iconurl,
+            },
+            fields: [
+                // {
+                // 	name: '\u200b',
+                // 	value: '\u200b',
+                // 	inline: false,
+                // },
+                {
+                    name: 'Placement Origin',
+                    value: `X:${'`' + build_result_query.placement_origin.x.toString().padStart(6) + '`'} Y:${'`' + build_result_query.placement_origin.y.toString().padStart(4) + '`'} Z:${'`' + build_result_query.placement_origin.z.toString().padStart(6) + '`'}`,
+                },
+                {
+                    name: 'Placement Destination',
+                    value: `X:${'`' + build_result_query.placement_destination.x.toString().padStart(6) + '`'} Y:${'`' + build_result_query.placement_destination.y.toString().padStart(4) + '`'} Z:${'`' + build_result_query.placement_destination.z.toString().padStart(6) + '`'}`,
+                },
+                {
+                    name: '地圖畫大小',
+                    value: `\`${Math.round((build_result_query.destination.x+1) / 128)}*${Math.round((build_result_query.destination.z+1) / 128)} (${(build_result_query.destination.x+1)}*${(build_result_query.destination.y+1)}*${(build_result_query.destination.z+1)})\``,
+                    inline: true,
+                },
+                {
+                    name: '分流',
+                    value: `${build_result_query.server}`,
+                    inline: true,
+                },
+                {
+                    name: '材料站',
+                    value: `${'-'}`,
+                    inline: true,
+                },
+                {
+                    name: '開始時間',
+                    value: `<t:${parseInt(build_result_query.startTime/1000)}:f>`,
+                    inline: true,
+                },
+                {
+                    name: '完成時間',
+                    value: `<t:${parseInt(build_result_query.endTime/1000)}:f>`,
+                    inline: true
+                },
+                {
+                    name: '消耗時間',
+                    value: `${parseInt((mapartBuildUseTime / 3600))} h ${parseInt((mapartBuildUseTime % 3600) / 60)} m ${parseInt(mapartBuildUseTime % 60)} s`,
+                },
+                {
+                    name: 'Speed',
+                    value: `${Math.round((build_result_query.totalBlocks / (mapartBuildUseTime / 3600)) * 10) / 10} Blocks / h`,
+                },
+                // {
+                //     name: 'Debug 放置成功率',
+                //     value: `${Math.round((sch_totalBlocks / debugPlaceCount) * 10000) / 100}% ${sch_totalBlocks} ${debugPlaceCount}`,
+                // },
+    
+            ],
+            // image: {
+            // 	url: 'https://i.imgur.com/AfFp7pu.png',
+            // },
+            //timestamp: new Date(),
+            // footer: {
+            //     text: bot.username,
+            //     icon_url: iconurl,
+            // }
+        }
+        return mapartfinishEmbed;
+    }
 }
 async function mp_pause(task) {
-    whetherPause = true
+    litematicPrinter.pause(true)
+    //whetherPause = true
 }
 async function mp_resume(task) {
-    whetherPause = false
+    litematicPrinter.resume()
+    //whetherPause = false
 }
 async function mp_stop(task) {
-    stop = true
+    litematicPrinter.stop()
+    //stop = true
 }
 async function mp_test(task) {
+    let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
+    let stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_build_cfg_cache.station}`);
+    let needReStock = [
+        { name: "white_wool", count: 128 },
+        { name: "black_wool", count: 128 },
+        { name: "orange_wool", count: 128 },
+        { name: "red_wool", count: 128 },
+    ]
+
+    await station.newrestock(bot, stationConfig, needReStock)
     //litematicPrinter.build(bot,"n")
     return
     let block = bot.blockAt(new Vec3(-7887, 145, -1695))
@@ -437,7 +739,7 @@ async function mp_open(task) {
     /**
      *      Init 檢查是否有未完成
     */
-    let crtoffsetindex = 0 ;
+    let crtoffsetindex = 0;
     for (let dx = 0; dx < mapart_open_cfg_cache["open"]["width"]; dx++) {
         for (let dy = 0; dy < mapart_open_cfg_cache["open"]["height"]; dy++) {
             let csmp = {
@@ -526,7 +828,7 @@ async function mp_open(task) {
     await moveToEmptySlot(44)
     for (let i = 0; i < mpstate.length;) {
         //console.log(i,mpstate[i])
-        if (mpstate[i].itemframe||mpstate[i].skip) {
+        if (mpstate[i].itemframe || mpstate[i].skip) {
             i++;
             continue
         }
@@ -567,7 +869,7 @@ async function mp_open(task) {
     }
     for (let i = 0; i < mpstate.length; i++) {
         await inv_sort()
-        if (mpstate[i].finish||mpstate[i].skip) continue
+        if (mpstate[i].finish || mpstate[i].skip) continue
         if (getEmptySlot().length == 0) {
             await bot.chat("/sethome mapart")
             await sleep(200)
