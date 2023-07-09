@@ -392,7 +392,7 @@ async function mp_build(task) {
     //console.log(pq)
     // send analysis
     let build_result_query = await litematicPrinter.progress_query(task, bot)
-    console.log(build_result_query)
+    //console.log(build_result_query)
     mapartBuildUseTime = (build_result_query.endTime - build_result_query.startTime) / 1000
     console.log(`消耗時間 ${parseInt((mapartBuildUseTime / 3600))} h ${parseInt((mapartBuildUseTime % 3600) / 60)} m ${parseInt(mapartBuildUseTime % 60)} s`)
 
@@ -443,6 +443,10 @@ async function mp_build(task) {
 					{
 						name: '放置成功率',
 						value: `${((build_result_query.totalBlocks / build_result_query.debug.placeCount) * 100).toFixed(1)}% (${build_result_query.totalBlocks} / ${build_result_query.debug.placeCount})`,
+					},
+                    {
+						name: '純放置效率(扣除其他時間)',
+						value: `${((build_result_query.totalBlocks / (mapartBuildUseTime-build_result_query.debug.restock_takeTime/1000))).toFixed(1)} b/s`,
 					},
                     {
                         name: '材料補充次數',
@@ -669,6 +673,9 @@ async function mp_stop(task) {
     //stop = true
 }
 async function mp_test(task) {
+    let sch = await schematic.loadFromFile(`C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\goodraid.litematic`)
+    console.log(sch)
+    return
     let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
     let stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_build_cfg_cache.station}`);
     let needReStock = [
