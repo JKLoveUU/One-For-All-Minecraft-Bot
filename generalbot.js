@@ -406,7 +406,19 @@ const taskManager = {
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
-            logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
+            switch (task.source) {
+                case 'minecraft-dm':
+                    bot.chat(`/m ${task.minecraftUser} Receive Task Success Add To The Queue`);
+                    break;
+                case 'console':
+                    logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
+                    break;
+                case 'discord':
+                    logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
+                    break;
+                default:
+                    break;
+            }
             this.tasks.push(task)
             if (login) await this.save();
             if (!this.tasking) await this.loop(true)
