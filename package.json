@@ -1,5 +1,5 @@
 {
-  "name": "ofa-bot",
+  "name": "one-for-all-mcfallout-bot",
   "version": "1.0.0",
   "description": "minecraft bot for mcfallout server",
   "main": "index.js",
@@ -37,7 +37,7 @@
     "discord.js": "^13.15.1",
     "fs": "^0.0.1-security",
     "js-binary": "^1.2.0",
-    "mineflayer": "^4.8.1",
+    "mineflayer": "^4.10.0",
     "moment": "^2.29.1",
     "prismarine-schematic": "^1.2.3",
     "silly-datetime": "^0.1.2",

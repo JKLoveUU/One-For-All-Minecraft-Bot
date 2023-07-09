@@ -3,6 +3,7 @@ if (!process.argv[2]) {
     return
 }
 let debug = process.argv.includes("--debug");
+let enableChat = process.argv.includes("--chat");
 let login = false
 let config
 const path = require('path');
@@ -92,9 +93,9 @@ const bot = (() => { // createMcBot
         port: profiles[process.argv[2]].port,
         username: profiles[process.argv[2]].username,
         auth: "microsoft",
-        version: "1.18.2"
+        version: "1.20"
     })
-    const ChatMessage = require('prismarine-chat')("1.18.2")
+    const ChatMessage = require('prismarine-chat')("1.20")
     if(debug){
         bot.on("windowOpen",async (window)=>{
             //console.log(window)
@@ -107,8 +108,10 @@ const bot = (() => { // createMcBot
     }
     bot.once('spawn', async () => {
         logger(true, 'INFO', `login as ${bot.username}`)
+        bot.logger = logger
         bot.gkill = kill;
         bot.botinfo= botinfo;
+        bot.debugMode = debug
         taskManager.init();
         chatManager.init();
         mapManager.init();
@@ -138,7 +141,7 @@ const bot = (() => { // createMcBot
         login = true
     })
     bot.on('message', async (jsonMsg) => {
-        if (debug) {
+        if (enableChat) {
             if(jsonMsg.toString().includes("目標生命 : ❤❤❤❤❤❤❤❤❤❤")) return
             logger(false, 'CHAT', jsonMsg.toAnsi())
         }
@@ -153,11 +156,11 @@ const bot = (() => { // createMcBot
             return
         }
         if (isTask.vaild) {
-            let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
+            let tk = new Task(taskManager.defaultPriority, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
             taskManager.assign(tk, isTask.longRunning)
             // console.log(taskManager.isImm(cmds))
         }else{
-            bot.chat(`/m ${playerID} 無效的指令 輸入.help 查看幫助 若要轉發消息使用 say <text>`)
+            bot.chat(`/m ${playerID} 無效的指令 輸入 help 查看幫助 若要轉發消息使用 say <text>`)
         }
         //console.log(jsonMsg.toString())
         logger(true, 'CHAT', jsonMsg.toString())
@@ -303,6 +306,7 @@ const taskManager = {
     // eventl: new EventEmitter(),
     tasks: [],
     err_tasks: [],
+    defaultPriority: 10,
     tasking: false,
     commands: commands,
     basicCommand: basicCommand,
@@ -335,7 +339,7 @@ const taskManager = {
         if (this.tasks.length != 0 && !this.tasking) {
             logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
             await sleep(3000)
-            await this.loop()
+            await this.loop(false)
         }
     },
     isTask(args) {
@@ -366,7 +370,7 @@ const taskManager = {
         //return false
     },
     async execute(task) {
-        logger(true, 'INFO', `execute task ${task.displayName}\n${task.content}`)
+        logger(true, 'INFO', `execute task ${task.displayName}`) //\n${task.content}
         let args = task.content
         //console.log(task)
         if (task.source == 'console') task.console = logger;
@@ -398,22 +402,23 @@ const taskManager = {
             return
         }
         await result.execute(task)
-        logger(true, 'INFO', `task ${task.displayName} completed`)
+        logger(true, 'INFO', `任務 ${task.displayName} \x1b[32mcompleted\x1b[0m`)
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
-            logger(true,'INFO',"解析到長時間指令 以新增到列隊")
+            logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
             this.tasks.push(task)
-            if (!this.tasking) await this.loop()
+            if (login) await this.save();
+            if (!this.tasking) await this.loop(true)
         } else {
             this.execute(task)
         }
     },
-    async loop() {
+    async loop(sort = true) {
         if (this.tasking) return
         this.tasking = true;
         process.send({ type: 'setStatus', value: 3202 })
-        this.tasksort()
+        if(sort) this.tasksort()
         let crtTask = this.tasks[0]
         if (login) await this.save();
         await this.execute(crtTask)
@@ -421,7 +426,7 @@ const taskManager = {
         if (login) await this.save();
         this.tasking = false;
         process.send({ type: 'setStatus', value: 3201 })
-        if (this.tasks.length) await this.loop()
+        if (this.tasks.length) await this.loop(true)
     },
     async save() {
         let data = {
@@ -516,7 +521,7 @@ process.on('message', async (message) => {
             //console.log(args)
             let isTask = taskManager.isTask(args)
             if (isTask.vaild) {
-                let tk = new Task(10, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
+                let tk = new Task(taskManager.defaultPriority, isTask.name, 'console', args, undefined, undefined, undefined, undefined)
                 taskManager.assign(tk, isTask.longRunning)
             } else {
                 console.log("無效的指令 輸入.help 查看幫助 若要轉發消息使用 .say <text>")

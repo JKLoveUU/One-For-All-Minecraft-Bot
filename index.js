@@ -91,7 +91,7 @@ const bots = {
         if (index >= this.name.length) return -1
         return this.bots[index]
     },
-    setBot(name, child, type = null, crtType = null, debug) {
+    setBot(name, child, type = null, crtType = null, debug,chat) {
         if (this.name.indexOf(name) === -1) {
             this.name.push(name)
             this.bots.push(
@@ -104,6 +104,7 @@ const bots = {
                     crtType: crtType,
                     reloadCD: config.setting.reconnect_CD,
                     debug: debug ? true : false,
+                    chat: chat ? true : false,
                 }
             )
         } else {
@@ -112,6 +113,7 @@ const bots = {
             if (type != null) this.bots[this.name.indexOf(name)].type = type;
             if (crtType != null) this.bots[this.name.indexOf(name)].crtType = crtType;
             if (debug != null) this.bots[this.name.indexOf(name)].debug = debug;
+            if (chat != null) this.bots[this.name.indexOf(name)].chat = debug;
         }
     },
     setBotStatus(name, status) {
@@ -546,15 +548,16 @@ function initBot(name) {
         return
     }
     let debug = profiles[name].debug ? true : false;
+    let chat = profiles[name].chat ? true : false;
     switch (profiles[name].type) {
         case 'general':
-            bots.setBot(name, undefined, 'general', 'general', debug);
+            bots.setBot(name, undefined, 'general', 'general', debug,chat);
             break;
         case 'raid':
-            bots.setBot(name, undefined, 'raid', 'raid', debug);
+            bots.setBot(name, undefined, 'raid', 'raid', debug,chat);
             break;
         case 'auto':
-            bots.setBot(name, undefined, 'auto', 'general', debug);
+            bots.setBot(name, undefined, 'auto', 'general', debug,chat);
             break;
         default:
             console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
