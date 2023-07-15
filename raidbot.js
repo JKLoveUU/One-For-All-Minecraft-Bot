@@ -7,6 +7,7 @@ if (!process.argv[2]) {
   return
 }
 let debug = process.argv.includes("--debug");
+let enableChat = process.argv.includes("--chat");
 let login = false
 let config
 const mineflayer = require('mineflayer');
@@ -15,6 +16,7 @@ const fs = require('fs')
 const fsp = require('fs').promises
 const sd = require('silly-datetime');
 //const pcfg = require(`../cfg/profiles.json`)[process.argv[2]]
+const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const profiles = require(`${process.cwd()}/profiles.json`);
 const commands = []
 const basicCommand = require(`./src/basicCommand`)
@@ -259,7 +261,7 @@ const bot = (() => { // createMcBot
     login = true
   })
 
-  bot.on(process.argv[3] === '1' ? 'messagestr' : 'dm', logger)
+  bot.on(enableChat ? 'messagestr' : 'dm', logger)
 
   bot.on('tpa', p => {
     bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
@@ -876,7 +878,7 @@ const taskManager = {
     //自動執行
     if (this.tasks.length != 0 && !this.tasking) {
       logger(false, 'INFO', `Found ${this.tasks.length} Task, will run at 3 second later.`)
-      await wait(3000)
+      await sleep(3000)
       //await this.loop()
     }
   },
