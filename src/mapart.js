@@ -133,7 +133,7 @@ const mapart = {
             identifier: [
                 "debug",
             ],
-            execute: notImplemented,
+            execute: mp_debug,
             vaild: true,
             longRunning: false,
             permissionRequre: 0,
@@ -271,6 +271,19 @@ const mapart = {
         }
     }
 }
+async function mp_debug(task) {
+    let mp = {};
+    for (let i = bot.inventory.inventoryStart; i <= bot.inventory.inventoryEnd; i++) {
+        if (bot.inventory.slots[i] == null) continue
+        let c = bot.inventory.slots[i].count
+        let n = bot.inventory.slots[i].name
+        if (!mp[n]) mp[n] = c;
+        else mp[n] += c
+    }
+    for(const i in mp){
+        console.log(i.toString().padEnd(16),mp[i])
+    }
+}
 async function mp_set(task) {
     let mapart_set_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
     if (!fs.existsSync(mapart_global_cfg.schematic_folder + task.content[2])) {
@@ -315,7 +328,7 @@ async function mp_info(task) {
     //console.log(mapart_info_cfg_cache)
     let lppq = await litematicPrinter.progress_query(task, bot)
     //console.log(lppq)
-    let prog = ((lppq.placedBlock/lppq.totalBlocks)*100).toFixed(1)
+    let prog = ((lppq.placedBlock / lppq.totalBlocks) * 100).toFixed(1)
 
     switch (task.source) {
         case 'minecraft-dm':
@@ -420,7 +433,21 @@ async function mp_build(task) {
             avatarURL: `https://mc-heads.net/avatar/${bot.username}`,
             embeds: [mapartfinishEmbed]
         };
-        if(true||bot.debugMode){
+        if (bot.debugMode) {
+            let inv ='```'
+            let mp = {};
+            for (let i = bot.inventory.inventoryStart; i <= bot.inventory.inventoryEnd; i++) {
+                if (bot.inventory.slots[i] == null) continue
+                let c = bot.inventory.slots[i].count
+                let n = bot.inventory.slots[i].name
+                if (!mp[n]) mp[n] = c;
+                else mp[n] += c
+            }
+            for(const i in mp){
+                inv += `${i.toString().padEnd(16)} ${mp[i]}\n`
+                //console.log(i.toString().padEnd(16),mp[i])
+            }
+            inv+='```'
             wh.embeds.push({
                 color: 0x0099ff,
                 title: `除錯資料`,
@@ -440,14 +467,20 @@ async function mp_build(task) {
                     // 	value: '\u200b',
                     // 	inline: false,
                     // },
-					{
-						name: '放置成功率',
-						value: `${((build_result_query.totalBlocks / build_result_query.debug.placeCount) * 100).toFixed(1)}% (${build_result_query.totalBlocks} / ${build_result_query.debug.placeCount})`,
-					},
                     {
-						name: '純放置效率(扣除其他時間)',
-						value: `${((build_result_query.totalBlocks / (mapartBuildUseTime-build_result_query.debug.restock_takeTime/1000))).toFixed(1)} b/s`,
-					},
+                        name: '放置成功率',
+                        value: `${((build_result_query.totalBlocks / build_result_query.debug.placeCount) * 100).toFixed(1)}% (${build_result_query.totalBlocks} / ${build_result_query.debug.placeCount})`,
+                        inline: true
+                    },
+                    {
+                        name: '斷線次數',
+                        value: `${build_result_query.debug.discconnectCount}`,
+                        inline: true
+                    },
+                    {
+                        name: '純放置效率(扣除其他時間)',
+                        value: `${((build_result_query.totalBlocks / (mapartBuildUseTime - build_result_query.debug.restock_takeTime / 1000))).toFixed(1)} b/s`,
+                    },
                     {
                         name: '材料補充次數',
                         value: `${build_result_query.debug.restock_count}`,
@@ -455,13 +488,17 @@ async function mp_build(task) {
                     },
                     {
                         name: '材料補充耗時',
-                        value: `${(build_result_query.debug.restock_takeTime/1000).toFixed(1)} 秒`,
+                        value: `${(build_result_query.debug.restock_takeTime / 1000).toFixed(1)} 秒`,
                         inline: true
                     },
                     {
                         name: 'FindNext 耗時',
-                        value: `${(build_result_query.debug.findNextTotalCounter/1000).toFixed(1)} 秒`,
+                        value: `${(build_result_query.debug.findNextTotalCounter / 1000).toFixed(1)} 秒`,
                         inline: false
+                    },
+                    {
+                        name: '結束時背包',
+                        value: inv,
                     },
                 ],
             })
@@ -494,10 +531,10 @@ async function mp_build(task) {
             let mapartAutofinishEmbed = gen_mapartAutoFinishEmbed()
             webhookClient.send({
                 // content: '',//`<@${mapart_settings.dc_tag}>`,
-                 username: bot.username,
-                 avatarURL: `https://mc-heads.net/avatar/${bot.username}`,
-                 embeds: [mapartAutofinishEmbed],
-             })
+                username: bot.username,
+                avatarURL: `https://mc-heads.net/avatar/${bot.username}`,
+                embeds: [mapartAutofinishEmbed],
+            })
             //send all finsih webhook
         } else {
             let nextV3 = [
@@ -540,7 +577,7 @@ async function mp_build(task) {
         }
         return
     }
-    function gen_mapartAutoFinishEmbed(){
+    function gen_mapartAutoFinishEmbed() {
         let iconurl = `https://mc-heads.net/avatar/${bot.username}`
         let mapartfinishEmbed = {
             color: 0x0099ff,
@@ -573,14 +610,14 @@ async function mp_build(task) {
                 },
                 {
                     name: '完成時間',
-                    value: `<t:${parseInt(build_result_query.endTime/1000)}:f>`,
+                    value: `<t:${parseInt(build_result_query.endTime / 1000)}:f>`,
                     inline: false
                 },
             ],
         }
         return mapartfinishEmbed;
     }
-    function gen_mapartFinishEmbed(){
+    function gen_mapartFinishEmbed() {
         let iconurl = `https://mc-heads.net/avatar/${bot.username}`
         let mapartfinishEmbed = {
             color: 0x0099ff,
@@ -611,7 +648,7 @@ async function mp_build(task) {
                 },
                 {
                     name: '地圖畫大小',
-                    value: `\`${Math.round((build_result_query.destination.x+1) / 128)}*${Math.round((build_result_query.destination.z+1) / 128)} (${(build_result_query.destination.x+1)}*${(build_result_query.destination.y+1)}*${(build_result_query.destination.z+1)})\``,
+                    value: `\`${Math.round((build_result_query.destination.x + 1) / 128)}*${Math.round((build_result_query.destination.z + 1) / 128)} (${(build_result_query.destination.x + 1)}*${(build_result_query.destination.y + 1)}*${(build_result_query.destination.z + 1)})\``,
                     inline: true,
                 },
                 {
@@ -626,12 +663,12 @@ async function mp_build(task) {
                 },
                 {
                     name: '開始時間',
-                    value: `<t:${parseInt(build_result_query.startTime/1000)}:f>`,
+                    value: `<t:${parseInt(build_result_query.startTime / 1000)}:f>`,
                     inline: true,
                 },
                 {
                     name: '完成時間',
-                    value: `<t:${parseInt(build_result_query.endTime/1000)}:f>`,
+                    value: `<t:${parseInt(build_result_query.endTime / 1000)}:f>`,
                     inline: true
                 },
                 {
@@ -646,7 +683,7 @@ async function mp_build(task) {
                 //     name: 'Debug 放置成功率',
                 //     value: `${Math.round((sch_totalBlocks / debugPlaceCount) * 10000) / 100}% ${sch_totalBlocks} ${debugPlaceCount}`,
                 // },
-    
+
             ],
             // image: {
             // 	url: 'https://i.imgur.com/AfFp7pu.png',
@@ -673,51 +710,21 @@ async function mp_stop(task) {
     //stop = true
 }
 async function mp_test(task) {
-    let sch = await schematic.loadFromFile(`C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\goodraid.litematic`)
-    console.log(sch)
-    return
+    //let sch = await schematic.loadFromFile(`C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\goodraid.litematic`)
+    //console.log(sch)
+    // return
     let mapart_build_cfg_cache = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`);
     let stationConfig = await readConfig(`${process.cwd()}/config/global/${mapart_build_cfg_cache.station}`);
     let needReStock = [
-        { name: "white_wool", count: 128 },
-        { name: "black_wool", count: 128 },
-        { name: "orange_wool", count: 128 },
-        { name: "red_wool", count: 128 },
+        { name: task.content[2], count: parseInt(task.content[3]) },
+        // { name: "black_wool", count: 128 },
+        // { name: "orange_wool", count: 128 },
+        // { name: "red_wool", count: 128 },
     ]
 
     await station.newrestock(bot, stationConfig, needReStock)
     //litematicPrinter.build(bot,"n")
     return
-    let block = bot.blockAt(new Vec3(-7887, 145, -1695))
-    // let ct = await openC(new Vec3(-7887, 145 ,-1695));
-    //console.log(ct)  
-    await mapCopy(new Vec3(-7887, 145, -1695), 11967, 20)
-
-
-    // console.log(ct) 
-    // ct.close()
-    // async function openC(pos) {
-    //     console.log(bot.blockAt(pos)?.name)
-    //     if (!['cartography_table'].includes(bot.blockAt(pos)?.name)) return false
-    //     return new Promise(async res => {
-    //       setTimeout(res, 5_000, false)
-    //       interactBlock(pos)
-    //       await once(bot, 'windowOpen')
-    //       await sleep(30)
-    //       res(true)
-    //     })
-    // }
-    // function interactBlock(pos) {
-    //     bot._client.write('block_place', {
-    //       location: pos,
-    //       direction: 1,
-    //       hand: 0,
-    //       cursorX: 0.5,
-    //       cursorY: 0.5,
-    //       cursorZ: 0.5,
-    //       insideBlock: false
-    //     })
-    //   }
 }
 async function mp_open(task) {
     const Item = require('prismarine-item')(bot.version)
@@ -763,7 +770,7 @@ async function mp_open(task) {
             }
             let currentIF = getItemFrame(mapart_ori.offset(dx, 0 - dy, 0))
             if (currentIF) csmp.itemframe = true;
-            if (currentIF?.metadata && currentIF?.metadata[8]?.itemId == 847) {
+            if (currentIF?.metadata && currentIF?.metadata[8]?.itemId == mcData.itemsByName['filled_map'].id) {
                 //console.log(currentIF.metadata[8].nbtData.value.map.value)
                 csmp.mapid = currentIF.metadata[8].nbtData.value.map.value;
                 csmp.finish = true;
@@ -777,6 +784,7 @@ async function mp_open(task) {
             mpstate.push(csmp)
         }
     }
+    //console.log(mpstate)
     //放支撐item frame 的
     let blockToAdd = 'quartz_block'
     await moveToEmptySlot(44)
@@ -1106,7 +1114,7 @@ async function mp_name(task) {
         }
         let currentIF = getItemFrame(mps.pos)
         //console.log(currentIF?.metadata[8])
-        if (currentIF && currentIF?.metadata && currentIF?.metadata[8]?.itemId == 847) {
+        if (currentIF && currentIF?.metadata && currentIF?.metadata[8]?.itemId == mcData.itemsByName['filled_map'].id) {
             mps.hasmap = true
             mps.mapid = currentIF.metadata[8].nbtData.value.map.value;
         }
@@ -1261,7 +1269,7 @@ async function mp_copy(task) {
         }
         let currentIF = getItemFrame(mps.pos)
         //console.log(currentIF?.metadata[8])
-        if (currentIF && currentIF?.metadata && currentIF?.metadata[8]?.itemId == 847) {
+        if (currentIF && currentIF?.metadata && currentIF?.metadata[8]?.itemId == mcData.itemsByName['filled_map'].id) {
             mps.hasmap = true
             mps.mapid = currentIF.metadata[8].nbtData.value.map.value;
         }
@@ -1317,8 +1325,8 @@ async function mp_copy(task) {
     for (let i = 0; i < mapart_name_cfg_cache["wrap"]["width"] * mapart_name_cfg_cache["wrap"]["height"]; i++) {
         let mps = maparts[i]
         if (!mps.hasmap || mps.amount >= mapart_name_cfg_cache["wrap"].copy_amount) continue
-        if (bot.inventory.count(951) < mapart_name_cfg_cache["wrap"].copy_amount - mps.amount) {
-            let crtmpam = bot.inventory.count(951)
+        if (bot.inventory.count(mcData.itemsByName['map'].id) < mapart_name_cfg_cache["wrap"].copy_amount - mps.amount) {
+            let crtmpam = bot.inventory.count(mcData.itemsByName['map'].id)
             let cap = (bot.inventory.emptySlotCount() - 2) * 64
             let require_amount = 0 - crtmpam;
             for (let require_amount_iterator = i; require_amount_iterator < maparts.length; require_amount_iterator++) {
@@ -1628,7 +1636,7 @@ async function pickMapItem(mpID) {
         if (ck) break;
         let et = bot.entities;
         for (i in et) {
-            if (et[i]?.mobType == 'Item' && et[i]?.metadata[8]?.itemId == 847 && et[i]?.metadata[8].nbtData?.value?.map?.value == mpID) {
+            if (et[i]?.mobType == 'Item' && et[i]?.metadata[8]?.itemId == mcData.itemsByName['filled_map'].id && et[i]?.metadata[8].nbtData?.value?.map?.value == mpID) {
                 if (et[i].onGround) await pathfinder.astarfly(bot, new Vec3(Math.round(et[i].position.x - 0.5), Math.round(et[i].position.y - 1), Math.round(et[i].position.z - 0.5)), null, null, null, true)
                 else await pathfinder.astarfly(bot, new Vec3(Math.round(et[i].position.x - 0.5), Math.round(et[i].position.y), Math.round(et[i].position.z - 0.5)), null, null, null, true)
             }
