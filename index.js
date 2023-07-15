@@ -209,17 +209,17 @@ const rl = readline.createInterface({
     //     return [hits.length ? hits : completions, line];
     // },
     completer: (line) => {
-        const completions = ['.switch', '.list', '.exit', '.close', '.reload', '.ff', '.eval', '.test', '.file'];
+        const completions = ['.switch', '.list', '.create','.exit', '.close', '.reload', '.ff', '.eval'];
         const hits = completions.filter((c) => c.startsWith(line));
-        if (line.startsWith('.file ')) {
-            const dirPath = 'C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\t\\';
-            try {
-                const files = fs.readdirSync(dirPath);
-                return [files.map((f) => `.file ${f}`), line];
-            } catch (err) {
-                // Handle error
-            }
-        }
+        // if (line.startsWith('.file ')) {
+        //     const dirPath = 'C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\t\\';
+        //     try {
+        //         const files = fs.readdirSync(dirPath);
+        //         return [files.map((f) => `.file ${f}`), line];
+        //     } catch (err) {
+        //         // Handle error
+        //     }
+        // }
         return [hits.length ? hits : completions, line];
     },
 });
@@ -231,6 +231,9 @@ rl.on('line', async (input) => {
         const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
         // console.log(`收到指令 ${rlCommandName}`)
         switch (rlCommandName.substring(1)) {
+            case 'create':
+                initBot(rlargs[0]);
+                break;
             case 'ff':    //debug
                 process.exit(0)
                 break;
@@ -536,7 +539,7 @@ async function handleClose() {
     client.destroy();
     process.exit(0);
 }
-function initBot(name) {
+function initBot(name,type) {
     bots.setBot(name, undefined);
     if (!profiles[name]) {
         bots.setBotStatus(name, 1000)
@@ -932,6 +935,10 @@ const exitcode = {
     2002: 'config err',
 };
 const botstatus = {
+    Close:{
+        code: 0,
+        description: "Closed",
+    },
     //  通用區
     0: 'Closed',    //正常關閉
     1: 'free',
