@@ -24,7 +24,7 @@
 
 ## 指令
 
-### 設定
+### **地圖畫設定**
 - set
 
 設定要改的地圖畫投影檔案 和 座標
@@ -38,14 +38,20 @@
 *若在資料夾中 前面加上資料夾名稱即可
 
 *此指令會檢查座標是否符合地圖畫規範 若有設定其他座標需求 於config/`<bot>`/mapart.json 自行設定
-### 查詢
+
+---
+
+### **查詢**
 - info
 - i
 
 返回當前檔案名稱 和建造進度 
 #### example
 `/m bot mapart info`
-### 建造
+
+---
+
+### **建造**
 - build `<args>`
 - b `<args>`
 #### example
@@ -68,31 +74,53 @@
 | -server `<server>` | 自動模式下 只需第一張設定 後續將自動套用相同設定 可以不選        |
 | -server `<server>` | .. |
 | -n        | 關閉Discord通知       |
-### 暫停
+
+---
+
+### **暫停**
 - pause
 - p
 
 暫停建造
 #### example
-`/m bot mapart info`
-### 繼續
+`/m bot mapart pause`
+
+---
+
+### **繼續**
 - resume
 - r
 
 繼續建造
-### 中止
+#### example
+`/m bot mapart resume`
+
+---
+
+### **中止**
 - stop
 - s
 
 中止建造
-### 開圖
+#### example
+`/m bot mapart stop`
+
+---
+
+### **開圖**
 - open
 - o
 
 /warp傳送後 在該位置 按設定大小開圖
 
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
-### 命名
+
+#### example
+`/m bot mapart open`
+
+---
+
+### **命名**
 - name
 - n
 
@@ -103,14 +131,25 @@
 ~~或許之後會多從一開始 和 單index(0-n)~~
 
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
-### 複印
+#### example
+`/m bot mapart name`
+
+---
+
+### **複印**
 - copy
 - c
 
 複印指定張數地圖畫 不可大於 64
 
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
-### 分裝
+#### example
+`/m bot mapart copy`
+
+
+---
+
+### **分裝**
 - wrap
 - w
 
@@ -119,3 +158,5 @@
 並放出 output shulker box 後 點及按鈕分裝
 
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
+#### example
+`/m bot mapart wrap`
