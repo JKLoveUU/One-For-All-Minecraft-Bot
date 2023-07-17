@@ -1,17 +1,18 @@
-[discord_setting]       #dc設定皆用"字串"!!!
-  token = "-" #
-  owners= "123456789012345678"
-  appId = "123456789012345678"
-  guildId = "123456789012345678"
-  channelId=  "123456789012345678"
-  whitelist_members = ["123456789012345678"]
-  whitelist_roles = ["123456789012345678"]
+# Version 1.0.0
+[discord_setting]                                   # Discord 設定皆用字串(用"兩邊框起來的)   !!!
+  token = "-"                                       # Discord Bot Token
+  owners= "123456789012345678"                      # Owner 目前這設定沒啥用... (或許之後會用於tag 或啥的)
+  appId = "123456789012345678"                      # Discord Bot Application ID
+  guildId = "123456789012345678"                    # Discord Guild ID
+  channelId=  "123456789012345678"                  # Discord Channel ID
+  enable_MC_DM_Forward = true                       # [ true / false ] 這個不用字串 目前這設定沒啥用...
+  MC_DM_Forward_channelId = "123456789012345678"    # must in same guild
+  whitelist_members = ["123456789012345678"]        # Discord 使用者白名單
+  whitelist_roles = ["123456789012345678"]          # Discord 身分組白名單
 [account]
-  id = ["Example1","Example2"]   # 設定好後 要在 profiles.json 也設
-
-# old config
-
+  id = ["Example1"]                                 # 要開啟的帳號 (帳號需再 profiles.json 內設定)
 [setting]
-  whitelist = ["JKLoveJK","XZeroTwoX","JKeqing"]
+  whitelist = ["Example1","Example2"]                # Minecraft 內 使用者白名單
+  reconnect_CD = 3000                               # (ms)   重啟CD (還沒實作???忘記了)
 
 
