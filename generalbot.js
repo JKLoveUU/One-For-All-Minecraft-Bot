@@ -146,6 +146,10 @@ const bot = (() => { // createMcBot
             logger(false, 'CHAT', jsonMsg.toAnsi())
         }
     })
+    bot.on('forcedMove', () => {   //FM
+        if(bot.debugMode) logger(false,'DEBUG',`\x1b[31m強制移動\x1b[0m ${bot.entity.position} 分流 ${botinfo.server}`);
+    });
+
     bot.on('dm', async (jsonMsg) => {
         let args = jsonMsg.toString().split(' ')
         let playerID = args[0].slice(1, args[0].length);
@@ -167,11 +171,11 @@ const bot = (() => { // createMcBot
     })
     bot.on('tpa', p => {
         bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpa request`);
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
     })
     bot.on('tpahere', p => {
         bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpahere request`);
+        logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
     })
     bot._client.on('playerlist_header', () => {
         botTabhandler(bot.tablist)
