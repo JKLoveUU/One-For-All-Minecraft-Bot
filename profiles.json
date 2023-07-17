@@ -1,14 +1,18 @@
 {
   "Example1": {
-    "username": "任意不重複Example1",
+    "username": "Example1",
     "host": "mcfallout.net",
     "port": "",
-    "type": "general"
+    "type": "general",
+    "chat": true,
+    "debug": false
   },
   "Example2": {
-    "username": "任意不重複Example2",
+    "username": "Example2",
     "host": "mcfallout.net",
     "port": "",
-    "type": "general"
+    "type": "raid",
+    "chat": false,
+    "debug": false
   }
 }
