@@ -1,17 +1,23 @@
 # One For All 
+[![License](https://img.shields.io/github/license/PKUFlyingPig/cs-self-learning)](https://github.com/JKLoveUU/One-For-All-Minecraft-Bot/blob/main/LICENSE)
+[![Official Discord](https://img.shields.io/static/v1.svg?label=OFFICIAL&message=DISCORD&color=blue&logo=discord&style=for-the-badge)](https://discord.gg/xUWg4CJ7FC)
 
 Minecraft Bot for McFallout server.
 
+## Tutorial
+- [[Discord](https://discord.gg/xUWg4CJ7FC)] https://discord.gg/xUWg4CJ7FC 
+- [使用教學](docs/zh_tw/usage.md)
+- [設定](docs/zh_tw/setting.md)
+- [指令](docs/zh_tw/commands.md)
+- [地圖畫](docs/zh_tw/Mapart.md)
+- [兌換](docs/zh_tw/CraftAndExchange.md)
+
+- [突襲](docs/zh_tw/setting.md) 設定教學
+- [EULA](docs/zh_tw/eula.md)
 
 ## Contribute
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
-## Tutorial
-- [使用教學](docs/zh_tw/usage.md)
-- [設定](docs/zh_tw/setting.md)
-- [地圖畫](docs/zh_tw/Mapart.md)
-- [兌換](docs/zh_tw/CraftAndExchange.md)
-- [EULA](docs/zh_tw/eula.md)
-- [EULA](docs/zh_tw/eula.md)
+
 ## Features
 ### Current
 * Discord
@@ -49,15 +55,25 @@ logger send to parent 會有時差 導致訊息順序不易觀看
 
 linux 下  exitcode 過大 (>256) 
 
+mapart stop 時 還續繼續蓋下一張 
+mapart 補材料時 分流重啟 多耗時很久
+
 --- 
 ## Develop
 
 `git clone https://github.com/JKLoveUU/Bot2.git`
 
+`cd `
+
 `npm install`
+
+`node .`
 有漏掉些沒在 package 內 
+
 p-timeout 2.0.0 版
+
 有修改 Mineflayer & Protocol 內部分功能
+
 - bot.lookAt() 直接return
     node_modules\mineflayer\lib\plugins\physics.js
 - swingArm() 直接return
@@ -65,7 +81,9 @@ p-timeout 2.0.0 版
 - keepAlive Emit Error 部分 return
     node_modules\minecraft-protocol\src\client\keepalive.js
 
-`node .`
+### 格式
+若有新功能 仿照src/template.js 和 lib/
+
 
 ## License
 [MIT](/LICENSE)
