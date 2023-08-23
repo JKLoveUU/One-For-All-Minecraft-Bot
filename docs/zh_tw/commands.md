@@ -29,6 +29,11 @@
 - info
 - i
 
+### **throw**
+- throw `<slot>`
+
+### **throwall**
+- throwall`
 顯示Bot信息
 
 ---

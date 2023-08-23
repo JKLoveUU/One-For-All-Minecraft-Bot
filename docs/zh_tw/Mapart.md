@@ -24,6 +24,8 @@
 
 ## 指令
 
+--- 
+
 ### **地圖畫設定**
 - set
 
@@ -31,6 +33,11 @@
 #### Syntax
 `set <filename> <x> <y> <z>`
 #### example
+
+`/m bot mapart set mapart.nbt -7232 100 -2369`
+
+The below example shows how to set file under `雜魚納西達` folder.
+
 `/m bot mapart set 雜魚納西達/mapart_0_0.nbt -7232 100 -2369`
 
 *依據 config/global/mapart.json 的投影資料夾去設定
