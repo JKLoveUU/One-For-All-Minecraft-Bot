@@ -113,7 +113,7 @@ const bots = {
             if (type != null) this.bots[this.name.indexOf(name)].type = type;
             if (crtType != null) this.bots[this.name.indexOf(name)].crtType = crtType;
             if (debug != null) this.bots[this.name.indexOf(name)].debug = debug;
-            if (chat != null) this.bots[this.name.indexOf(name)].chat = debug;
+            if (chat != null) this.bots[this.name.indexOf(name)].chat = chat;
         }
     },
     setBotStatus(name, status) {
@@ -236,9 +236,6 @@ rl.on('line', async (input) => {
                 break;
             case 'ff':    //debug
                 process.exit(0)
-                break;
-            case 'eval':    //debug
-                eval(input.substring(6))
                 break;
             case 'list':
                 const longestLength = bots.name.reduce((longest, a) => {
@@ -594,6 +591,7 @@ function createBot(name) {
     }
     let args = [name, bot.type]
     if (bot.debug) args.push("--debug")
+    if (bot.chat) args.push("--chat")
     const child = fork(path.join(__dirname, botFile), args);
     bots.setBot(name, child);
     child.on('error', e => {
