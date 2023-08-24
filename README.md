@@ -5,6 +5,8 @@
 Minecraft Bot for McFallout server.
 
 ## Tutorial
+- [EULA](docs/zh_tw/eula.md)
+
 - [[Discord](https://discord.gg/xUWg4CJ7FC)] https://discord.gg/xUWg4CJ7FC 
 - [使用教學](docs/zh_tw/usage.md)
 - [設定](docs/zh_tw/setting.md)
@@ -13,10 +15,24 @@ Minecraft Bot for McFallout server.
 - [兌換](docs/zh_tw/CraftAndExchange.md)
 
 - [突襲](docs/zh_tw/setting.md) 設定教學
-- [EULA](docs/zh_tw/eula.md)
 
 ## Contribute
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
+## 已知錯誤
+
+經驗目前 總值 = 等級  等級是不準確的
+
+Discord Fetch Error 時，會重複發送dc面板
+
+還沒init 完成時 使用某些指令會報錯
+
+logger send to parent 會有時差 導致訊息順序不易觀看
+
+linux 下  exitcode 過大 (>256) 
+
+mapart stop 時 還續繼續蓋下一張 
+
+mapart 補材料時 分流重啟 多耗時很久
 
 ## Features
 ### Current
@@ -46,18 +62,6 @@ Minecraft Bot for McFallout server.
 * MC-Feature
     1. Clear Area
     2. ~~Villager Trading~~
-## 已知錯誤
-Discord Fetch Error 時，會重複發送dc面板
-
-還沒init 完成時 使用某些指令會報錯
-
-logger send to parent 會有時差 導致訊息順序不易觀看
-
-linux 下  exitcode 過大 (>256) 
-
-mapart stop 時 還續繼續蓋下一張 
-mapart 補材料時 分流重啟 多耗時很久
-
 --- 
 ## Develop
 
@@ -68,9 +72,7 @@ mapart 補材料時 分流重啟 多耗時很久
 `npm install`
 
 `node .`
-有漏掉些沒在 package 內 
-
-p-timeout 2.0.0 版
+(Node v18.16.0)
 
 有修改 Mineflayer & Protocol 內部分功能
 
