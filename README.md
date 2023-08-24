@@ -18,6 +18,7 @@ Minecraft Bot for McFallout server.
 
 ## Contribute
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
+- [BlackChang1204](https://github.com/BlackChang1204) 撰寫設定教學
 ## 已知錯誤
 
 經驗目前 總值 = 等級  等級是不準確的
