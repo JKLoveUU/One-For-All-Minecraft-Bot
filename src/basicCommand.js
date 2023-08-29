@@ -421,6 +421,7 @@ async function cmd_balinfo(task) {
 
 }
 async function cmd_expinfo(task) {
+    //console.log(bot.experience)
     let expLevel = bot.experience.level
     let expPoint = bot.experience.points
     let expProgress = Math.round(bot.experience.progress * 1000) / 10;
@@ -582,7 +583,7 @@ async function cmd_getTopRaidServers(task) {
                 server = playerServer_Result[tgPlayerList[idx]].slice(6)
             }
             //  playerServer_Result[tgPlayerList[idx]].toString().padStart(8)
-            console.log(`${(parseInt(idx) + 1).toString().padEnd(2)} ${tgPlayerList[idx].padEnd(16)} ${server.padStart(2)} ${tgEmerald[idx].toString().padStart(8)}`)
+            console.log(`${(parseInt(idx) + 1).toString().padEnd(2)} ${tgPlayerList[idx].padEnd(16)} ${server.padStart(3)} ${tgEmerald[idx].toString().padStart(8)}`)
         }
     }
     try { bot.closeWindow(bot.currentWindow) } catch (err) { }
