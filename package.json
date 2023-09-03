@@ -39,6 +39,7 @@
     "js-binary": "^1.2.0",
     "mineflayer": "^4.10.0",
     "moment": "^2.29.1",
+    "p-timeout": "^2.0.0",
     "prismarine-schematic": "^1.2.3",
     "silly-datetime": "^0.1.2",
     "toml-require": "^1.2.0"
