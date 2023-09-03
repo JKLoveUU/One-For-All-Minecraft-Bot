@@ -265,11 +265,11 @@ const bot = (() => { // createMcBot
 
   bot.on('tpa', p => {
     bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpa request`);
+    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
   })
   bot.on('tpahere', p => {
     bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "Accept" : "Deny"} ${p}'s tpahere request`);
+    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
   })
   bot.on('wait', async () => {
     process.send({ type: 'setReloadCD', value: 120_000 })
