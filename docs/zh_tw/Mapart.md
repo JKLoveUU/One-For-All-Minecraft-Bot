@@ -76,7 +76,7 @@ The below example shows how to set file under `雜魚納西達` folder.
 #### Arguments
 | Args      | Description   |
 | --------- | ------------- |
-| -auto `<index>`| 自動蓋到找不到檔案(若未止定 則蓋到找不到下張檔案)       |
+| -auto `<index>`| 自動蓋到找不到檔案(若未指定 則蓋到找不到下張檔案)       |
 | -a `<index>`| ..      |
 | -server `<server>` | 自動模式下 只需第一張設定 後續將自動套用相同設定 可以不選        |
 | -server `<server>` | .. |

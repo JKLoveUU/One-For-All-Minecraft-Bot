@@ -549,7 +549,7 @@ async function mp_build(task) {
                 source: task.source,
                 content: ['mapart', 'set', nextFileName, nextV3[0].toString(), nextV3[1].toString(), nextV3[2].toString()],
                 timestamp: Date.now(),
-                sendNotification: task.sendNotification,
+                sendNotification: false,    //task.sendNotification,
                 minecraftUser: task.minecraftUser,
                 discordUser: task.discordUser
             }
@@ -567,7 +567,7 @@ async function mp_build(task) {
                 source: task.source,
                 content: nextBuildArgs,
                 timestamp: Date.now(),
-                sendNotification: task.sendNotification,
+                sendNotification: false,    //task.sendNotification,
                 minecraftUser: task.minecraftUser,
                 discordUser: task.discordUser
             }
@@ -674,10 +674,12 @@ async function mp_build(task) {
                 {
                     name: '消耗時間',
                     value: `${parseInt((mapartBuildUseTime / 3600))} h ${parseInt((mapartBuildUseTime % 3600) / 60)} m ${parseInt(mapartBuildUseTime % 60)} s`,
+                    inline: true
                 },
                 {
                     name: 'Speed',
                     value: `${Math.round((build_result_query.totalBlocks / (mapartBuildUseTime / 3600)) * 10) / 10} Blocks / h`,
+                    inline: true
                 },
                 // {
                 //     name: 'Debug 放置成功率',
@@ -1289,8 +1291,13 @@ async function mp_copy(task) {
         //console.log("pos",boxVec.offset(standOffest.x,standOffest.y,standOffest.z))
         await pathfinder.astarfly(bot, boxVec.offset(standOffest.x, standOffest.y, standOffest.z), null, null, null, true)
         await sleep(50)
+        await pathfinder.astarfly(bot, boxVec.offset(standOffest.x, standOffest.y, standOffest.z), null, null, null, true)
+        await sleep(50)
         await mcFallout.openPreventSpecItem(bot)
-        let shulker_box = await containerOperation.openContainerWithTimeout(bot, boxVec, 3000);
+        let shulker_box, t = 0;
+        while (t++ < 3 && !shulker_box) {
+            shulker_box = await containerOperation.openContainerWithTimeout(bot, boxVec, 1000)
+        }
         if (!shulker_box) {
             console.log(`開啟盒子-${i + 1} 失敗`, boxVec)
             return
@@ -1466,6 +1473,7 @@ async function mp_wrap(task) {
      * check input shulker
      */
     let input = await containerOperation.openContainerWithTimeout(bot, inputVec, 500)
+    await sleep(500)
     if (!input) {
         console.log("can't open input box")
         return
@@ -1515,7 +1523,7 @@ async function mp_wrap(task) {
                 const timeout = setTimeout(() => {
                     fail = true;
                     rej()
-                }, 3000)
+                }, 7000)
                 while (!fail) {
                     await sleep(10)
                     let block = bot.blockAt(outputVec)
@@ -1527,11 +1535,11 @@ async function mp_wrap(task) {
                 res()
             })
         } catch (e) {
-            console.log("找不到")
+            console.log("找不到out box")
             return
         }
         let output, t2 = 0;
-        while (t2++ < 3 && !output) {
+        while (t2++ < 10 && !output) {
             output = await containerOperation.openContainerWithTimeout(bot, outputVec, 1000)
         }
         if (!output) {
