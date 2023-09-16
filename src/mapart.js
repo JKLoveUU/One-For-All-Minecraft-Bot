@@ -312,7 +312,7 @@ async function mp_set(task) {
     if (!fs.existsSync(mapart_global_cfg.schematic_folder + task.content[2])) {
         await taskreply(task,
             `&7[&bMP&7] &c未發現投影 &7${task.content[2]} &r請重新輸入`,
-            `未發現投影 ${task.content[2]} 請重新輸入`,
+            `未發現投影 請重新輸入\n資料夾: ${mapart_global_cfg.schematic_folder}\n檔案: ${task.content[2]}`,
             null,
         );
         return;
