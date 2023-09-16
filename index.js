@@ -9,12 +9,20 @@ const rq_raid = require(`./raidbot.js`)
 //const rqgeneral = fork(path.join(__dirname, 'generalbot.js'));
 //const mineflayer = require("mineflayer");
 //require(`${process.cwd()}/generalbot.js`)
-
 // configs
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
-const profiles = require(`${process.cwd()}/profiles.json`);
-
+var profiles
+try{
+    profiles = require(`${process.cwd()}/profiles.json`);
+}catch(err){
+    console.log(`帳號設定檔讀取失敗\nFilePath: ${process.cwd()}/profiles.json`)
+    console.log("Please Check The Json Format")
+    console.log(`Error Msg: \x1b[31m${err.message}\x1b[0m`)
+    console.log("You can visit following websites the fix: ")
+    console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
+    console.log(`\x1b[33mhttps://www.google.com/search?q=${(err.message).replaceAll(" ","+")}\x1b[0m`)
+}
 const { Vec3 } = require('vec3')
 const EventEmitter = require('events');
 
@@ -494,7 +502,12 @@ process.on('SIGTERM', handleClose);
 console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
 //logToFileAndConsole("INFO", "CONSOLE", "\nBy using the software, you are agreeing to be bound by the terms of EULA");
 logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
-client.login(config.discord_setting.token)
+try{
+    client.login(config.discord_setting.token)
+}catch(err){
+    logToFileAndConsole("ERROR", "DISCORD", `Discord Bot Login 失敗\n${err.message}`)
+}
+
 main()
 function main() {
     console.log(config.account.id)
