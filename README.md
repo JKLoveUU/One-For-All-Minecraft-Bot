@@ -21,19 +21,20 @@ Minecraft Bot for McFallout server.
 - [BlackChang1204](https://github.com/BlackChang1204) 撰寫設定教學
 ## 已知錯誤
 
-經驗目前 總值 = 等級  等級是不準確的
+[使用體驗不佳 原因未知] 經驗目前 總值 = 等級  等級是不準確的
 
-Discord Fetch Error 時，會重複發送dc面板
+[網路&DC_API錯誤] Discord Fetch Error 時，會重複發送dc面板
 
-還沒init 完成時 使用某些指令會報錯
+[使用體驗不佳] 還沒init 完成時 使用某些指令會報錯
 
-logger send to parent 會有時差 導致訊息順序不易觀看
+[不影響] logger send to parent 會有時差 導致訊息順序不易觀看
 
-linux 下  exitcode 過大 (>256) 
+[不影響] linux 下  exitcode 過大 (>256) 
 
 mapart stop 時 還續繼續蓋下一張 
 
 mapart 補材料時 分流重啟 多耗時很久
+[低概率] mapart 切換分流後 server mpdb 無 可判別背包加載完成訊息 導致切錯材料蓋錯
 
 ## Features
 ### Current
