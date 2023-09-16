@@ -605,7 +605,10 @@ function createBot(name) {
         if (c == 0) console.log(`${name}: stopped success`)
         else if (c >= 2000) {
             logToFileAndConsole("ERROR", name, `closed with err code: ${c}`)
-        } else {
+        } else if(c == 202){
+            logToFileAndConsole("ERROR", name, `設定檔案錯誤 已停止重啟`)
+            console.log("請使用 .create <botname> 再次開啟bot")
+        }else {
             logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`)
             // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
             setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD))
@@ -931,6 +934,7 @@ const exitcode = {
     //  不可重啟類
     2001: 'config not found',
     2002: 'config err',
+    202: 'config err',
 };
 const botstatus = {
     Close:{
