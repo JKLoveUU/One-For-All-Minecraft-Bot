@@ -258,7 +258,19 @@ const mapart = {
             logger(true, 'INFO', `Creating config - mapart.json`)
             save(mapart_cfg)
         } else {
-            mapart_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`)
+            //bot.logger(true,"INFO",`加載個別Bot地圖畫設定資訊...`)
+            try{
+                mapart_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`)
+            }catch(e){
+                bot.logger(true,"ERROR",`個別Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/${bot_id}/mapart.json`)
+                await sleep(1000)
+                console.log("Please Check The Json Format")
+                console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
+                console.log("You can visit following websites the fix: ")
+                console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
+                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ","+")}\x1b[0m`)
+                bot.gkill(202)
+            }
         }
         //mapart.json (global)
         if (!fs.existsSync(`${process.cwd()}/config/global/mapart.json`)) {
@@ -267,7 +279,18 @@ const mapart = {
                 if (err) console.log('mapart save error', err);
             });
         } else {
-            mapart_global_cfg = await readConfig(`${process.cwd()}/config/global/mapart.json`)
+            try{
+                mapart_global_cfg = await readConfig(`${process.cwd()}/config/global/mapart.json`)
+            }catch(e){
+                bot.logger(true,"ERROR",`全Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/global/mapart.json`)
+                await sleep(1000)
+                console.log("Please Check The Json Format")
+                console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
+                console.log("You can visit following websites the fix: ")
+                console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
+                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ","+")}\x1b[0m`)
+                bot.gkill(202)
+            }
         }
     }
 }
