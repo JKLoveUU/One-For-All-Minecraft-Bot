@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "rb": "pkg -t node16-win-x64 index.js -o release-pre/pre.exe",
     "b": "pkg -t node16-win-x64 index.js -o test/abc.exe",
     "b_linux": "pkg -t node16-linux index.js -o raid/raid",
     "bd": "pkg -t node16-win-x64 index.js -o test/abc.exe --debug"
