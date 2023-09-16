@@ -2,6 +2,7 @@ const fs = require("fs");
 const fsp = require('fs').promises
 const sd = require('silly-datetime');
 const containerOperation = require(`../lib/containerOperation`);
+//const craft = require(`../lib/craft`);
 const { Vec3 } = require('vec3')
 const pTimeout = require('p-timeout');
 const { once } = require('events')
@@ -99,6 +100,17 @@ const craftAndExchange = {
             execute: ce_stop,
             vaild: true,
             longRunning: false,
+            permissionRequre: 0,
+        },
+        {
+            name: "合成兌換-合成",
+            identifier: [
+                "craft",
+                "c",
+            ],
+            execute: ce_craft,
+            vaild: true,
+            longRunning: true,
             permissionRequre: 0,
         },
     ],
@@ -261,7 +273,7 @@ async function exchange(task) {
         bot.chat(`/m ${task.minecraftUser} 兌換id錯誤 ${exchangeIndex}`);
         return;
     }
-    console.log(`兌換目標 ${shopName} ${exchangeIndex}`);
+    bot.logger(true, 'INFO', `兌換目標 ${shopName} ${exchangeIndex}`)
     let input_weight, output_weight, shop_item_window;
     let openShop_item_timeout = false;
     let inputsIds = [];
@@ -292,7 +304,7 @@ async function exchange(task) {
     //console.log(outputsIds)
     //bot.on('windowOpen', checkwindows);
     bot.chat(shopName);
-    console.log(`open ${shopName} at ${Date.now().toString()}`);
+    //console.log(`open ${shopName} at ${Date.now().toString()}`);
     await pTimeout(once(bot, 'windowOpen'), 3000).catch((err) => {
         console.log('開啟兌換超時');
         openShop_item_timeout = true;
@@ -306,10 +318,15 @@ async function exchange(task) {
         }
     })
     if (openShop_item_timeout) {
-        bot.chat(`/m ${task.minecraftUser} 無法檢測兌換商店 已中止`);
+        bot.logger(true, 'ERROR', `無法檢測兌換商店 已中止`)
         return;
     }
-    let itemWeight = shop_item_window.slots[exchangeIndex].nbt.value.display.value.Name.value.match(/x\d{1,4}/g);
+    await sleep(500)  //下面那行常常null錯
+    let itemWeight = shop_item_window.slots[exchangeIndex]?.nbt?.value?.display?.value?.Name?.value?.match(/x\d{1,4}/g); 
+    if(!itemWeight){
+        bot.logger(true, 'ERROR', `無法讀取 兌換權重`)
+        return
+    } 
     input_weight = parseInt(itemWeight.shift().slice(1))
     output_weight = parseInt(itemWeight.shift().slice(1))
     bot.closeWindow(shop_item_window.id)
@@ -340,8 +357,8 @@ async function exchange(task) {
                     try {
                         let boxposblock = bot.blockAt(new Vec3(cfg_exchange_cache["output_" + (i + 1)][0][0], cfg_exchange_cache["output_" + (i + 1)][0][1], cfg_exchange_cache["output_" + (i + 1)][0][2]))
                         if (boxposblock == null) {
-                            console.log("距離過遠 已終止 兌換/合成")
-                            bot.chat(`/m ${task.minecraftUser} 距離過遠 已終止 兌換/合成`);
+                            bot.logger(true, 'INFO', `距離過遠 已終止 兌換/合成`)
+                            if(task.source=="minecraft-dm") bot.chat(`/m ${task.minecraftUser} 距離過遠 已終止 兌換/合成`);
                             await sleep(500)
                             return;
                         } else if (!boxposblock.name.includes('shulker')) {
@@ -498,7 +515,38 @@ async function exchange(task) {
         //console.log('完整結束一次')
         //break;
     }
-    bot.chat(`/m ${task.minecraftUser} 兌換結束`);
+    bot.logger(true, 'INFO', `兌換結束`)
+    if(task.source=="minecraft-dm") bot.chat(`/m ${task.minecraftUser} 兌換結束`);
+}
+
+async function ce_craft(task){
+    return
+    let cfg_craft_cache = await readConfig(`${process.cwd()}/config/${bot_id}/craftAndExchange.json`);
+    const Item = require('prismarine-item')(bot.version)
+    const Recipe=require("prismarine-recipe")(bot.version).Recipe;
+    let outputrecipes=Recipe.find(mcData.itemsByName[cfg_craft_cache.output_1[2]].id, null);
+    //console.log(outputrecipes)
+    let targetRecipe = outputrecipes[0]
+    //console.log(targetRecipe)
+    //console.log(targetRecipe.delta)
+    if(targetRecipe){
+        console.log("找到合成表");
+        if(targetRecipe.inShape) console.log("固定配方(非3x3只要在相對位置就好)");
+        if(targetRecipe.outShape) console.log("有序配方(任意位置)");
+        if(targetRecipe.ingredients) console.log("無序配方");
+        console.log(targetRecipe);
+       // bot.chat(`/m ${playerid} 找到合成表 500ms 後開始`); 
+        await sleep(500);
+    }else{
+        console.log("無合成表");
+        return
+        //bot.chat(`/m ${playerid} 無合成表 已結束`); 
+    }
+    let crafting_table_Pos =new Vec3(cfg_craft_cache.crafting_table[0],cfg_craft_cache.crafting_table[1],cfg_craft_cache.crafting_table[2]);
+    let crafting_table_block = bot.blockAt(crafting_table_Pos)
+    //let crafting_table = await pTimeout(bot.openBlock(crafting_table_block),1000);
+    //await bot.craft(targetRecipe, 64, crafting_table_block)
+    await craft.craft(bot,targetRecipe,-1,crafting_table_block)
 }
 async function ce_stop(task){
     stop = true;
