@@ -147,64 +147,64 @@ ps 別想著來搞我 token已經重置了
 	},
 	"materialsMode": "station",           #這個不用動
 	"station": "materials.json",          #材料設定檔的檔名
-	"open": {                             #目前以下都用不到
-		"folder": "暫時用不到",
-		"warp": "Example_10",
-		"height": 9,
-		"width": 6,
-		"open_start": -1,
-		"open_end": -1
+	"open": {                       # 請確保材料站內有 glow_item_frame, quartz_block, map
+		"folder": "暫時用不到",		 	
+		"warp": "Example_10",		# 開圖warp(設在第一張地圖畫的區域內)
+		"height": 9,				# 高
+		"width": 6,					# 寬
+		"open_start": -1,			# 無用
+		"open_end": -1				# 無用
 	},
-	"wrap": {
-		"warp": "Example_10",
-		"height": 9,
-		"width": 6,
-		"origin": [
+	"wrap": {						# 分裝 複印 命名 設定
+		"warp": "Example_10",		# 工作點 warp
+		"height": 9,				# 高
+		"width": 6,					# 寬
+		"origin": [					# 左上地圖畫座標
 			0,
 			0,
 			0
 		],
-		"anvil": [
+		"anvil": [					# 鐵砧座標
 			0,
 			0,
 			0
 		],
-		"anvil_stand": [
+		"anvil_stand": [			# 用鐵砧時 bot站的位置
 			0,
 			0,
 			0
 		],
-		"cartography_table": [
+		"cartography_table": [		# 製圖台座標
 			0,
 			0,
 			0
 		],
-		"cartography_table_stand": [
+		"cartography_table_stand": [# 用製圖台時 bot站的位置
 			0,
 			0,
 			0
 		],
-		"facing": "north",
-		"name": "ExampleMP_Name",
-		"source": "https://www.pixiv.net/artworks/92433849",
-		"artist": "https://www.pixiv.net/users/3036679",
-		"copy_amount": 1,
-		"copy_f_shulker": [
+		"facing": "north",			# 地圖畫朝向方向(以地圖畫為準)
+		"name": "ExampleMP_Name",	# 改名用的  會自動套用以下格式 可不填 改名僅index
+		"source": "https://www.pixiv.net/artworks/92433849", 	# 無用
+		"artist": "https://www.pixiv.net/users/3036679", 		# 無用
+		"copy_amount": 1,			# 複印數量 (must not greater than 64)
+		"copy_f_shulker": [			# 複印輸出的第一個盒子座標
 			0,
 			0,
 			0
 		],
-		"wrap_input_shulker": [
+		"wrap_input_shulker": [		# 分裝輸入
 			0,
 			0,
 			0
 		],
-		"wrap_output_shulker": [
+		"wrap_output_shulker": [	# 分裝輸出 弄台卸合機
 			0,
 			0,
 			0
 		],
-		"wrap_button": [
+		"wrap_button": [			# 輸出按鈕
 			0,
 			0,
 			0
@@ -216,11 +216,26 @@ ps 別想著來搞我 token已經重置了
 檔案路徑: `release-pre\config\global\mapart.json`
 ```
 {
-	"schematic_folder": "C:/Users/USER/Desktop/Minecraft Bot/release-pre/config/global/schematics",           
-        #放入投影檔的資料夾
+	"schematic_folder": "C:/Users/User/AppData/Roaming/.minecraft/schematics/",           
+    #投影檔的資料夾 (請把所有'\' 換成 '\\' 或是'/')
 	"discord_webhookURL": "https://discord.com/api/webhooks/1143516310496624682/9D7YCIZeWkqhkdai3VEOY9M_1rnB452yl3Vy4jNEm4aSMiz0wtXC8DBT8CeQ3oqnwDG-",
-        #webhook網址(須建立於你希望bot發送通知訊息的文字頻道)
-	"replaceMaterials": []        #材料替代(有設定好檔案基本用不到)
+    #webhook網址(須建立於你希望bot發送通知訊息的文字頻道)
+	"replaceMaterials": [
+
+	]
+	#材料替代(有設定好檔案基本用不到)
+	#裡面填[] array 若>1項 需用,隔開
+	# ex:
+	#	"replaceMaterials": [
+			[
+				"packed_ice",
+				"ice"
+			],
+	#		[
+				"cobweb",
+				"mushroom_stem"
+			]
+	# ]
 }
 ```
 [webhook建立教學](https://youtu.be/JtN9Z84cKBc)

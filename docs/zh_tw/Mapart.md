@@ -118,6 +118,7 @@ The below example shows how to set file under `雜魚納西達` folder.
 - open
 - o
 
+請自行確保背包有空間放
 /warp傳送後 在該位置 按設定大小開圖
 
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
