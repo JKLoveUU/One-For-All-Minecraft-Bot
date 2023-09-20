@@ -136,17 +136,17 @@ ps 別想著來搞我 token已經重置了
 }
 ```
 ### mapart.json
-檔案路徑: `release-pre\config\你的Bot名稱\mapart.json`
+檔案路徑: `\config\你的Bot名稱\mapart.json`
 ```
 {
 	"schematic": {
-		"filename": "abc_5_5.nbt",    #投影檔名
-		"placementPoint_x": 1984,     #放置投影的X座標
-		"placementPoint_y": 101,      #放置投影的Y座標
-		"placementPoint_z": 4159      #放置投影的Z座標
+		"filename": "abc_5_5.nbt",    # 投影檔名 支持 litematica 格式的地圖畫檔案
+		"placementPoint_x": 1984,     # 放置投影的X座標
+		"placementPoint_y": 101,      # 放置投影的Y座標
+		"placementPoint_z": 4159      # 放置投影的Z座標
 	},
-	"materialsMode": "station",           #這個不用動
-	"station": "materials.json",          #材料設定檔的檔名
+	"materialsMode": "station",     # 目前僅支援 "station"
+	"station": "station_xx.json",   # 材料站設定檔的檔名
 	"open": {                       # 請確保材料站內有 glow_item_frame, quartz_block, map
 		"folder": "暫時用不到",		 	
 		"warp": "Example_10",		# 開圖warp(設在第一張地圖畫的區域內)
@@ -213,7 +213,7 @@ ps 別想著來搞我 token已經重置了
 }
 ```
 ### mapart.json
-檔案路徑: `release-pre\config\global\mapart.json`
+檔案路徑: `\config\global\mapart.json`
 ```
 {
 	"schematic_folder": "C:/Users/User/AppData/Roaming/.minecraft/schematics/",           
@@ -239,8 +239,8 @@ ps 別想著來搞我 token已經重置了
 }
 ```
 [webhook建立教學](https://youtu.be/JtN9Z84cKBc)
-### materials.json
-檔案路徑: `release-pre\config\global\materials.json` 
+### station_xx.json
+檔案路徑: `\config\global\station_xx.json` 
 materials內格式: ["材料名稱"       ,[盒子的X座標,盒子的Y座標,盒子的Z座標,"盒子位於以Bot為中心的那個方位","按鈕方位，與Bot方位同樣只是前面加個b"]],
 需參考傳點請前往`/warp JKLoveJK_2`或`/warp BlackChangTW_2`
 材料站和"offset"的所有內容新手建議直接照抄，因為可能導致Bot無法運作
@@ -324,10 +324,6 @@ materials內格式: ["材料名稱"       ,[盒子的X座標,盒子的Y座標,�
 		["warped_wart_block",[279,24,-217,"W","WE"]],
 		["cobbled_deepslate",[279,24,-216,"W","WE"]],
 		["raw_iron_block"		,[279,24,-215,"W","WE"]],
-		["barrel"		,[279,24,-214,"W","WE"]],
-		["tnt"		,[279,24,-213,"W","WE"]],
-		["anvil"		,[279,24,-212,"W","WE"]],
-		["barrier"		,[279,24,-211,"W","WE"]]
 	  ]
 }
 ```
