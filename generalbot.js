@@ -64,7 +64,7 @@ function logger(logToFile = false, type = "INFO", ...args) {
 //這裡應該改成從lib自動載入 加入commands 並init
 const template = require(`./src/mapart`);
 const mapart = require(`./src/mapart`);
-const craftAndExchange = require(`./src/craftAndExchange`);;
+const craftAndExchange = require(`./src/craftAndExchange`);
 const commands = [mapart, craftAndExchange,template]
 const basicCommand = require(`./src/basicCommand`)
 if (!profiles[process.argv[2]]) {
@@ -79,6 +79,13 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
 }
 process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
 process.send({ type: 'setStatus', value: 3001 })
+const watchDog = {
+    tab: setTimeout(showTabError, 30_000),
+}
+function showTabError(){
+    logger(true, 'WARN', `Tab過久未更新 或 格式改變無法載入`)
+    kill(101)
+}
 const botinfo = {
     server: -1,
     serverCH: -1,
@@ -504,7 +511,10 @@ function botTabhandler(tab) {
             bi = true;
         }
     }
-    if (si && ci && bi) botinfo.tabUpdateTime = new Date();
+    if (si && ci && bi){
+        botinfo.tabUpdateTime = new Date();
+        watchDog.tab.refresh()
+    }
 }
 async function readConfig(file) {
     var raw_file = await fsp.readFile(file);
