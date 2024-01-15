@@ -80,7 +80,7 @@ if (!fs.existsSync(`config/${process.argv[2]}`)) {
 process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
 process.send({ type: 'setStatus', value: 3001 })
 const watchDog = {
-    tab: setTimeout(showTabError, 30_000),
+    //tab: setTimeout(showTabError, 30_000),
 }
 function showTabError(){
     logger(true, 'WARN', `Tab過久未更新 或 格式改變無法載入`)
@@ -506,14 +506,14 @@ function botTabhandler(tab) {
     }
     if (balanceIdentifier != -1) {
         bal = parseFloat(header[balanceIdentifier + 2]?.text.replace(/,/g, ''));
-        if (bal != NaN) {
+        if (!isNaN(bal)) {
             botinfo.balance = bal
             bi = true;
         }
     }
     if (si && ci && bi){
         botinfo.tabUpdateTime = new Date();
-        watchDog.tab.refresh()
+        // watchDog.tab.refresh()
     }
 }
 async function readConfig(file) {
