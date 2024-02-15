@@ -488,11 +488,11 @@ function botTabhandler(data) {
     const tabMsg = new ChatMessage(JSON.parse(data.header));
     const tabData = tabMsg.toString();
     const serverData = serverRegex.exec(tabData);
-    serverData.length > 0 ? botinfo.server = parseInt(serverData[1]) : botinfo.server = -1;
+    serverData != null && serverData.length > 0 ? botinfo.server = parseInt(serverData[1]) : botinfo.server = -1;
     const emeraldData = emeraldRegex.exec(tabData);
-    emeraldData.length > 0 ? botinfo.balance = parseInt(emeraldData[1].replace(/,/g, '')) : botinfo.balance = -1;
+    emeraldData != null && emeraldData.length > 0 ? botinfo.balance = parseInt(emeraldData[1].replace(/,/g, '')) : botinfo.balance = -1;
     const coinData = coinRegex.exec(tabData);
-    coinData.length > 0 ? botinfo.coin = parseInt(coinData[1].replace(/,/g, '')) : botinfo.coin = -1;
+    coinData != null && coinData.length > 0 ? botinfo.coin = parseInt(coinData[1].replace(/,/g, '')) : botinfo.coin = -1;
     botinfo.tabUpdateTime = new Date()
 }
 
