@@ -1,0 +1,14 @@
+diff --git a/src/client/keepalive.js b/src/client/keepalive.js
+index a0073765b8d9d1bf2747310336e79dc57e3ac6fe..eb399ea3a4dca36f6a0bd372a778c0209dda79d4 100644
+--- a/src/client/keepalive.js
++++ b/src/client/keepalive.js
+@@ -15,8 +15,7 @@ module.exports = function (client, options) {
+   function onKeepAlive (packet) {
+     if (timeout) { clearTimeout(timeout) }
+     timeout = setTimeout(() => {
+-      client.emit('error', new Error(`client timed out after ${checkTimeoutInterval} milliseconds`))
+-      client.end('keepAliveError')
++      return
+     }, checkTimeoutInterval)
+     client.write('keep_alive', {
+       keepAliveId: packet.keepAliveId
