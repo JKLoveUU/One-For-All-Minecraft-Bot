@@ -487,13 +487,14 @@ function botTabhandler(tab) {
     }
     if (serverIdentifier != -1 && header[serverIdentifier + 2]?.text?.startsWith('分流')) {
         botinfo.serverCH = header[serverIdentifier + 2].text
-        let serverCH = header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length);
-        let s = -1;
-        try {
-            s = CNTA.toInteger(serverCH);
-        } catch (e) {
-            //return -1;
-        }
+        // let serverCH = header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length);
+        // let s = -1;
+        // try {
+        //     s = CNTA.toInteger(serverCH);
+        // } catch (e) {
+        //     //return -1;
+        // }
+        let s = parseInt(header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length))
         botinfo.server = s
         si = true;
     }
@@ -505,6 +506,7 @@ function botTabhandler(tab) {
         }
     }
     if (balanceIdentifier != -1) {
+        //console.log(header[balanceIdentifier + 2])  // %betterbond_format_fixer_#vault_eco_balance_fixed#% 
         bal = parseFloat(header[balanceIdentifier + 2]?.text.replace(/,/g, ''));
         if (!isNaN(bal)) {
             botinfo.balance = bal
