@@ -336,7 +336,7 @@ client.on('ready', async () => {
     await channel.messages.fetch({ limit: 30 }).then(messages => {
         const botMessages = messages.filter(m => m.author.id === client.user.id && m.author.bot);
         const matchingMessages = botMessages.filter(m => {
-            if (m.embeds && m.embeds.length > 0) {
+            if (m.embeds && m.embeds.length > 0 && (Date.now() - m.createdTimestamp < 13 * 24 * 60 * 60 * 1000)) {
                 const firstEmbed = m.embeds[0];
                 const matchingField = firstEmbed.fields.find(field => field.name.startsWith('目前共'));
                 return (matchingField !== undefined);
