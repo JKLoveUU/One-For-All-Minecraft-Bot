@@ -14,7 +14,7 @@ const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const profiles = require(`${process.cwd()}/profiles.json`);
 const fs = require('fs');
 const fsp = require('fs').promises
-const {version} = require("os");
+const { version } = require("os");
 const CNTA = require('chinese-numbers-to-arabic');
 
 
@@ -23,7 +23,7 @@ const ChatMessage = require("prismarine-chat")(registry);
 
 function logger(logToFile = false, type = "INFO", ...args) {
     if (logToFile) {
-        process.send({type: 'logToFile', value: {type: type, msg: args.join(' ')}})
+        process.send({ type: 'logToFile', value: { type: type, msg: args.join(' ') } })
         return
     }
     let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
@@ -75,15 +75,15 @@ const basicCommand = require(`./src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
-    process.send({type: 'setStatus', value: 1000})
+    process.send({ type: 'setStatus', value: 1000 })
     process.exit(2001)
 }
 if (!fs.existsSync(`config/${process.argv[2]}`)) {
-    fs.mkdirSync(`config/${process.argv[2]}`, {recursive: true});
+    fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
 }
-process.send({type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000})
-process.send({type: 'setStatus', value: 3001})
+process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
+process.send({ type: 'setStatus', value: 3001 })
 const watchDog = {
     //tab: setTimeout(showTabError, 30_000),
 }
@@ -133,9 +133,9 @@ const bot = (() => { // createMcBot
         for (c in commands) {
             await commands[c].init(bot, process.argv[2], logger);
         }
-        bot._client.write('client_command', {payload: 0})     //fix death bug
-        process.send({type: 'setStatus', value: 3201})
-        process.send({type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000})
+        bot._client.write('client_command', { payload: 0 })     //fix death bug
+        process.send({ type: 'setStatus', value: 3201 })
+        process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
             'dm'
@@ -197,17 +197,17 @@ const bot = (() => { // createMcBot
     //---------------
     bot.on('error', async (error) => {
         if (error?.message?.includes('RateLimiter disallowed request')) {
-            process.send({type: 'setReloadCD', value: 60_000})
-            process.send({type: 'setStatus', value: 4})
+            process.send({ type: 'setReloadCD', value: 60_000 })
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1900)
         } else if (error?.message?.includes('Failed to obtain profile data for')) {
-            process.send({type: 'setStatus', value: 4})
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1901)
         } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
-            process.send({type: 'setStatus', value: 4})
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1902)
         } else if (error?.message?.includes('read ECONNRESET')) {
-            process.send({type: 'setStatus', value: 4})
+            process.send({ type: 'setStatus', value: 4 })
             await kill(1903)
         }
         console.log('[ERROR]name:\n' + error.name)
@@ -219,8 +219,8 @@ const bot = (() => { // createMcBot
     bot.on('kicked', async (reason, loggedIn) => {
         logger(true, 'WARN', `${loggedIn}, kick reason ${reason}`)
         if (reason.includes("The proxy server is restarting")) {
-            process.send({type: 'setReloadCD', value: 120_000})
-            process.send({type: 'setStatus', value: 100})
+            process.send({ type: 'setReloadCD', value: 120_000 })
+            process.send({ type: 'setStatus', value: 100 })
             await kill(1003)
         }
         await kill(1000)
@@ -233,7 +233,7 @@ const bot = (() => { // createMcBot
         await kill(1000)
     })
     bot.once('wait', async () => {
-        process.send({type: 'setReloadCD', value: 120_000})
+        process.send({ type: 'setReloadCD', value: 120_000 })
         logger(true, 'INFO', `send to wait`)
         await kill(1001)
     })
@@ -244,7 +244,7 @@ const bot = (() => { // createMcBot
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
     //logger(true, 'WARN', `exiting in status ${code}`)
-    process.send({type: 'setStatus', value: 4})
+    process.send({ type: 'setStatus', value: 4 })
     bot.end()
     process.exit(code)
 }
@@ -387,7 +387,7 @@ const taskManager = {
                 }
             }
         }
-        if (!result) result = {vaild: false};
+        if (!result) result = { vaild: false };
         return result
         //return false
     },
@@ -453,7 +453,7 @@ const taskManager = {
     async loop(sort = true) {
         if (this.tasking) return
         this.tasking = true;
-        process.send({type: 'setStatus', value: 3202})
+        process.send({ type: 'setStatus', value: 3202 })
         if (sort) this.tasksort()
         let crtTask = this.tasks[0]
         if (login) await this.save();
@@ -461,7 +461,7 @@ const taskManager = {
         this.tasks.shift()
         if (login) await this.save();
         this.tasking = false;
-        process.send({type: 'setStatus', value: 3201})
+        process.send({ type: 'setStatus', value: 3201 })
         if (this.tasks.length) await this.loop(true)
     },
     async save() {
@@ -488,11 +488,11 @@ function botTabhandler(data) {
     const tabMsg = new ChatMessage(JSON.parse(data.header));
     const tabData = tabMsg.toString();
     const serverData = serverRegex.exec(tabData);
-    serverData != null && serverData.length > 0 ? botinfo.server = parseInt(serverData[1]) : botinfo.server = -1;
+    if (serverData != null && serverData.length > 0) botinfo.server = parseInt(serverData[1])
     const emeraldData = emeraldRegex.exec(tabData);
-    emeraldData != null && emeraldData.length > 0 ? botinfo.balance = parseInt(emeraldData[1].replace(/,/g, '')) : botinfo.balance = -1;
+    if (emeraldData != null && emeraldData.length > 0) botinfo.balance = parseInt(emeraldData[1].replace(/,/g, ''))
     const coinData = coinRegex.exec(tabData);
-    coinData != null && coinData.length > 0 ? botinfo.coin = parseInt(coinData[1].replace(/,/g, '')) : botinfo.coin = -1;
+    if (coinData != null && coinData.length > 0) botinfo.coin = parseInt(coinData[1].replace(/,/g, ''))
     botinfo.tabUpdateTime = new Date()
 }
 
@@ -523,7 +523,7 @@ process.on('message', async (message) => {
                 tasks: taskManager.tasks,
                 runingTask: taskManager.tasking
             }
-            process.send({type: 'dataToParent', value: dataRequiredata})
+            process.send({ type: 'dataToParent', value: dataRequiredata })
             break;
         case 'cmd':
             let args = message.text.slice(1).split(' ')
@@ -546,11 +546,11 @@ process.on('message', async (message) => {
 
             break;
         case 'reload':
-            process.send({type: 'setStatus', value: 3002})
+            process.send({ type: 'setStatus', value: 3002 })
             await kill(1002)
             break;
         case 'exit':
-            process.send({type: 'setStatus', value: 0})
+            process.send({ type: 'setStatus', value: 0 })
             await kill(0)
             break;
         default:
