@@ -14,11 +14,16 @@ const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const profiles = require(`${process.cwd()}/profiles.json`);
 const fs = require('fs');
 const fsp = require('fs').promises
-const { version } = require("os");
+const {version} = require("os");
 const CNTA = require('chinese-numbers-to-arabic');
+
+
+const registry = require("prismarine-registry")("1.20")
+const ChatMessage = require("prismarine-chat")(registry);
+
 function logger(logToFile = false, type = "INFO", ...args) {
     if (logToFile) {
-        process.send({ type: 'logToFile', value: { type: type, msg: args.join(' ') } })
+        process.send({type: 'logToFile', value: {type: type, msg: args.join(' ')}})
         return
     }
     let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
@@ -65,27 +70,29 @@ function logger(logToFile = false, type = "INFO", ...args) {
 const template = require(`./src/mapart`);
 const mapart = require(`./src/mapart`);
 const craftAndExchange = require(`./src/craftAndExchange`);
-const commands = [mapart, craftAndExchange,template]
+const commands = [mapart, craftAndExchange, template]
 const basicCommand = require(`./src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)
-    process.send({ type: 'setStatus', value: 1000 })
+    process.send({type: 'setStatus', value: 1000})
     process.exit(2001)
 }
 if (!fs.existsSync(`config/${process.argv[2]}`)) {
-    fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
+    fs.mkdirSync(`config/${process.argv[2]}`, {recursive: true});
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
 }
-process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
-process.send({ type: 'setStatus', value: 3001 })
+process.send({type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000})
+process.send({type: 'setStatus', value: 3001})
 const watchDog = {
     //tab: setTimeout(showTabError, 30_000),
 }
-function showTabError(){
+
+function showTabError() {
     logger(true, 'WARN', `Tab過久未更新 或 格式改變無法載入`)
     kill(101)
 }
+
 const botinfo = {
     server: -1,
     serverCH: -1,
@@ -103,8 +110,8 @@ const bot = (() => { // createMcBot
         version: "1.20"
     })
     const ChatMessage = require('prismarine-chat')("1.20")
-    if(debug){
-        bot.on("windowOpen",async (window)=>{
+    if (debug) {
+        bot.on("windowOpen", async (window) => {
             //console.log(window)
             // console.log(window.title)
             // for(i in window.slots){
@@ -117,18 +124,18 @@ const bot = (() => { // createMcBot
         logger(true, 'INFO', `login as ${bot.username}`)
         bot.logger = logger
         bot.gkill = kill;
-        bot.botinfo= botinfo;
+        bot.botinfo = botinfo;
         bot.debugMode = debug
         taskManager.init();
         chatManager.init();
         mapManager.init();
         await basicCommand.init(bot, process.argv[2], logger);
-        for(c in commands){
+        for (c in commands) {
             await commands[c].init(bot, process.argv[2], logger);
         }
-        bot._client.write('client_command', { payload: 0 })     //fix death bug
-        process.send({ type: 'setStatus', value: 3201 })
-        process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD :20_000})
+        bot._client.write('client_command', {payload: 0})     //fix death bug
+        process.send({type: 'setStatus', value: 3201})
+        process.send({type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000})
         bot.chatAddPattern(
             /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
             'dm'
@@ -149,12 +156,12 @@ const bot = (() => { // createMcBot
     })
     bot.on('message', async (jsonMsg) => {
         if (enableChat) {
-            if(jsonMsg.toString().includes("目標生命 : ❤❤❤❤❤❤❤❤❤❤")) return
+            if (jsonMsg.toString().includes("目標生命 : ❤❤❤❤❤❤❤❤❤❤")) return
             logger(false, 'CHAT', jsonMsg.toAnsi())
         }
     })
     bot.on('forcedMove', () => {   //FM
-        if(bot.debugMode) logger(false,'DEBUG',`\x1b[31m強制移動\x1b[0m ${bot.entity.position} 分流 ${botinfo.server}`);
+        if (bot.debugMode) logger(false, 'DEBUG', `\x1b[31m強制移動\x1b[0m ${bot.entity.position} 分流 ${botinfo.server}`);
     });
 
     bot.on('dm', async (jsonMsg) => {
@@ -170,7 +177,7 @@ const bot = (() => { // createMcBot
             let tk = new Task(taskManager.defaultPriority, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
             taskManager.assign(tk, isTask.longRunning)
             // console.log(taskManager.isImm(cmds))
-        }else{
+        } else {
             bot.chat(`/m ${playerID} 無效的指令 輸入 help 查看幫助 若要轉發消息使用 say <text>`)
         }
         //console.log(jsonMsg.toString())
@@ -184,36 +191,36 @@ const bot = (() => { // createMcBot
         bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
         logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
     })
-    bot._client.on('playerlist_header', () => {
-        botTabhandler(bot.tablist)
+    bot._client.on('playerlist_header', (data) => {
+        botTabhandler(data)
     })
     //---------------
     bot.on('error', async (error) => {
         if (error?.message?.includes('RateLimiter disallowed request')) {
-            process.send({ type: 'setReloadCD', value: 60_000 })
-            process.send({ type: 'setStatus', value: 4 })
+            process.send({type: 'setReloadCD', value: 60_000})
+            process.send({type: 'setStatus', value: 4})
             await kill(1900)
         } else if (error?.message?.includes('Failed to obtain profile data for')) {
-            process.send({ type: 'setStatus', value: 4 })
+            process.send({type: 'setStatus', value: 4})
             await kill(1901)
         } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
-            process.send({ type: 'setStatus', value: 4 })
+            process.send({type: 'setStatus', value: 4})
             await kill(1902)
         } else if (error?.message?.includes('read ECONNRESET')) {
-            process.send({ type: 'setStatus', value: 4 })
+            process.send({type: 'setStatus', value: 4})
             await kill(1903)
         }
         console.log('[ERROR]name:\n' + error.name)
         console.log('[ERROR]msg:\n' + error.message)
         console.log('[ERROR]code:\n' + error.code)
-        logger(true, 'ERROR', error+'\n'+error.stack);
+        logger(true, 'ERROR', error + '\n' + error.stack);
         await kill(1000)
     })
     bot.on('kicked', async (reason, loggedIn) => {
         logger(true, 'WARN', `${loggedIn}, kick reason ${reason}`)
-        if(reason.includes("The proxy server is restarting")){
-            process.send({ type: 'setReloadCD', value: 120_000 })
-            process.send({ type: 'setStatus', value: 100 })
+        if (reason.includes("The proxy server is restarting")) {
+            process.send({type: 'setReloadCD', value: 120_000})
+            process.send({type: 'setStatus', value: 100})
             await kill(1003)
         }
         await kill(1000)
@@ -226,7 +233,7 @@ const bot = (() => { // createMcBot
         await kill(1000)
     })
     bot.once('wait', async () => {
-        process.send({ type: 'setReloadCD', value: 120_000 })
+        process.send({type: 'setReloadCD', value: 120_000})
         logger(true, 'INFO', `send to wait`)
         await kill(1001)
     })
@@ -237,13 +244,14 @@ const bot = (() => { // createMcBot
 async function kill(code = 1000) {
     //process.send({ type: 'restartcd', value: restartcd })
     //logger(true, 'WARN', `exiting in status ${code}`)
-    process.send({ type: 'setStatus', value: 4 })
+    process.send({type: 'setStatus', value: 4})
     bot.end()
     process.exit(code)
 }
+
 const mapManager = {
     maplist: [],
-    init: function(){
+    init: function () {
         bot.mapManager = this
         bot._client.on('map', (mapdata) => {
             //console.log(mapdata)
@@ -256,29 +264,30 @@ const chatManager = {
     cd: 400,
     lastSend: Date.now(),
     checker: setInterval(async () => {
-        if(chatManager.q.length==0&&chatManager.pq.length==0) return
-        if(Date.now() - chatManager.lastSend<chatManager.cd) return
-        if(chatManager.pq.length!=0){
+        if (chatManager.q.length == 0 && chatManager.pq.length == 0) return
+        if (Date.now() - chatManager.lastSend < chatManager.cd) return
+        if (chatManager.pq.length != 0) {
             bot.chat(chatManager.pq.shift());
-            chatManager.lastSend= Date.now()
+            chatManager.lastSend = Date.now()
             return
         }
-        if(chatManager.q.length!=0){
+        if (chatManager.q.length != 0) {
             bot.chat(chatManager.q.shift());
-            chatManager.lastSend= Date.now()
+            chatManager.lastSend = Date.now()
             return
         }
     }, 10),
-    chat: async function(text){
+    chat: async function (text) {
         this.q.push(text)
     },
-    cmd: async function(text){
+    cmd: async function (text) {
         this.pq.push(text)
     },
-    init: function(){
+    init: function () {
         bot.chatManager = this
     }
 }
+
 class Task {
     priority = 10;
     displayName = '';
@@ -290,17 +299,18 @@ class Task {
     minecraftUser = '';
     //DC
     discordUser = null;
+
     //Console
     /**
-     * 
-     * @param {*} priority 
-     * @param {*} displayName 
+     *
+     * @param {*} priority
+     * @param {*} displayName
      * @param {string} source AcceptSource: console, minecraft-dm, discord
-     * @param {string[]} content 
-     * @param {Date} timestamp 
-     * @param {boolean} sendNotification 
-     * @param {string | null} minecraftUser 
-     * @param {string | null} discordUser 
+     * @param {string[]} content
+     * @param {Date} timestamp
+     * @param {boolean} sendNotification
+     * @param {string | null} minecraftUser
+     * @param {string | null} discordUser
      */
     constructor(priority = 10, displayName = '未命名', source = '', content = '', timestamp = Date.now(), sendNotification = true, minecraftUser = '', discordUser = null) {
         this.priority = priority;
@@ -313,6 +323,7 @@ class Task {
         this.discordUser = discordUser;
     }
 }
+
 const taskManager = {
     // eventl: new EventEmitter(),
     tasks: [],
@@ -336,14 +347,14 @@ const taskManager = {
         if (!fs.existsSync(`${process.cwd()}/config/${process.argv[2]}/task.json`)) {
             this.save()
         } else {
-            try{
+            try {
                 let tt = await readConfig(`${process.cwd()}/config/${process.argv[2]}/task.json`)
                 this.tasks = tt.tasks
                 this.err_tasks = tt.err_tasks
-            }catch(e){
+            } catch (e) {
                 await this.save()
             }
-    
+
         }
         //console.log(`task init complete / ${this.tasks.length} tasks now`)
         //自動執行
@@ -376,7 +387,7 @@ const taskManager = {
                 }
             }
         }
-        if (!result) result = { vaild: false };
+        if (!result) result = {vaild: false};
         return result
         //return false
     },
@@ -417,16 +428,16 @@ const taskManager = {
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
-            if(task.sendNotification){
+            if (task.sendNotification) {
                 switch (task.source) {
                     case 'minecraft-dm':
                         bot.chat(`/m ${task.minecraftUser} Receive Task Success Add To The Queue`);
                         break;
                     case 'console':
-                        logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
+                        logger(true, 'INFO', "Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
                         break;
                     case 'discord':
-                        logger(true,'INFO',"Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
+                        logger(true, 'INFO', "Receive Task \x1b[33mSuccess Add To The Queue\x1b[0m")
                         break;
                     default:
                         break;
@@ -442,15 +453,15 @@ const taskManager = {
     async loop(sort = true) {
         if (this.tasking) return
         this.tasking = true;
-        process.send({ type: 'setStatus', value: 3202 })
-        if(sort) this.tasksort()
+        process.send({type: 'setStatus', value: 3202})
+        if (sort) this.tasksort()
         let crtTask = this.tasks[0]
         if (login) await this.save();
         await this.execute(crtTask)
         this.tasks.shift()
         if (login) await this.save();
         this.tasking = false;
-        process.send({ type: 'setStatus', value: 3201 })
+        process.send({type: 'setStatus', value: 3201})
         if (this.tasks.length) await this.loop(true)
     },
     async save() {
@@ -469,62 +480,30 @@ const taskManager = {
     //     this.eventl.emit('commit', task);
     // },
 }
-function botTabhandler(tab) {
-    const header = tab.header.extra
-    if (!header) return
-    let si = false, ci = false, bi = false
-    let serverIdentifier = -1;
-    let coinIdentifier = -1;
-    let balanceIdentifier = -1;
-    for (i in header) {
-        if (header[i].text == '所處位置 ') {            //+2
-            serverIdentifier = parseInt(i);            // 不知道為啥之前用parseInt
-        } else if (header[i].text == '村民錠餘額') {    //+2
-            coinIdentifier = parseInt(i);
-        } else if (header[i].text == '綠寶石餘額') {    //+3
-            balanceIdentifier = parseInt(i);
-        }
-    }
-    if (serverIdentifier != -1 && header[serverIdentifier + 2]?.text?.startsWith('分流')) {
-        botinfo.serverCH = header[serverIdentifier + 2].text
-        // let serverCH = header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length);
-        // let s = -1;
-        // try {
-        //     s = CNTA.toInteger(serverCH);
-        // } catch (e) {
-        //     //return -1;
-        // }
-        let s = parseInt(header[serverIdentifier + 2].text.slice(2, header[serverIdentifier + 2].text.length))
-        botinfo.server = s
-        si = true;
-    }
-    if (coinIdentifier != -1) {
-        coin = parseInt(header[coinIdentifier + 2]?.text.replace(/,/g, ''));
-        if (coin != NaN) {
-            botinfo.coin = coin
-            ci = true
-        }
-    }
-    if (balanceIdentifier != -1) {
-        //console.log(header[balanceIdentifier + 2])  // %betterbond_format_fixer_#vault_eco_balance_fixed#% 
-        bal = parseFloat(header[balanceIdentifier + 2]?.text.replace(/,/g, ''));
-        if (!isNaN(bal)) {
-            botinfo.balance = bal
-            bi = true;
-        }
-    }
-    if (si && ci && bi){
-        botinfo.tabUpdateTime = new Date();
-        // watchDog.tab.refresh()
-    }
+const serverRegex = /所處位置 : 分流(\d+)-(\S+)/g
+const emeraldRegex = /綠寶石餘額 : ([\d,]+)/g
+const coinRegex = /村民錠餘額 : ([\d,]+)/g
+
+function botTabhandler(data) {
+    const tabMsg = new ChatMessage(JSON.parse(data.header));
+    const tabData = tabMsg.toString();
+    const serverData = serverRegex.exec(tabData);
+    serverData != null && serverData.length > 0 ? botinfo.server = parseInt(serverData[1]) : botinfo.server = -1;
+    const emeraldData = emeraldRegex.exec(tabData);
+    emeraldData != null && emeraldData.length > 0 ? botinfo.balance = parseInt(emeraldData[1].replace(/,/g, '')) : botinfo.balance = -1;
+    const coinData = coinRegex.exec(tabData);
+    coinData != null && coinData.length > 0 ? botinfo.coin = parseInt(coinData[1].replace(/,/g, '')) : botinfo.coin = -1;
+    botinfo.tabUpdateTime = new Date()
 }
+
 async function readConfig(file) {
     var raw_file = await fsp.readFile(file);
     var com_file = await JSON.parse(raw_file);
     return com_file;
 }
-process.on('uncaughtException', async(err) => {
-    logger(true, 'ERROR', err+"\n"+err.stack);
+
+process.on('uncaughtException', async (err) => {
+    logger(true, 'ERROR', err + "\n" + err.stack);
     //console.log(err)
     //if (login) try{await taskManager.save()}catch(e){};
     kill(1000)
@@ -544,7 +523,7 @@ process.on('message', async (message) => {
                 tasks: taskManager.tasks,
                 runingTask: taskManager.tasking
             }
-            process.send({ type: 'dataToParent', value: dataRequiredata })
+            process.send({type: 'dataToParent', value: dataRequiredata})
             break;
         case 'cmd':
             let args = message.text.slice(1).split(' ')
@@ -558,20 +537,20 @@ process.on('message', async (message) => {
             }
             break;
         case 'chat':
-            try{
+            try {
                 bot.chat(message.text)
                 console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
-            }catch(e){
-                logger(false,"ERROR","訊息發送失敗 try again")
+            } catch (e) {
+                logger(false, "ERROR", "訊息發送失敗 try again")
             }
 
             break;
         case 'reload':
-            process.send({ type: 'setStatus', value: 3002 })
+            process.send({type: 'setStatus', value: 3002})
             await kill(1002)
             break;
         case 'exit':
-            process.send({ type: 'setStatus', value: 0 })
+            process.send({type: 'setStatus', value: 0})
             await kill(0)
             break;
         default:
