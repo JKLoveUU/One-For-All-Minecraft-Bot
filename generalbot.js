@@ -18,7 +18,7 @@ const { version } = require("os");
 const CNTA = require('chinese-numbers-to-arabic');
 
 
-const registry = require("prismarine-registry")("1.20")
+const registry = require("prismarine-registry")("1.18.2")
 const ChatMessage = require("prismarine-chat")(registry);
 
 function logger(logToFile = false, type = "INFO", ...args) {
