@@ -21,7 +21,7 @@ const console = require('console');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const wait = () => new Promise(setImmediate)
 var whetherBuild = false, whetherPause = false, stop = false;
-let logger, mcData, bot_id, bot
+let logger, mcData, bot_id, bot, csafe_success = false
 // 地圖畫面向方向 (用於不同角度 圖工作等)
 let mp_direction = {
     "north": {  //2b
@@ -422,8 +422,20 @@ async function mp_build(task) {
         console.log(`&7${mapart_build_cfg_cache.server} TAB 分流讀取失敗 請重試`)
         return
     }
+    
+    csafe_success = false
+    bot.chat('/csafe')
+    bot.on('messagestr', csafe)
+    while (!csafe_success) {
+        await bot.waitForTicks(30)
+        bot.chat('/csafe')
+    }
+    bot.off('messagestr', csafe)
+    
     //try {
     await litematicPrinter.build_file(task, bot, litematicPrinter.model_mapart, mapart_build_cfg_cache)
+
+    
     //let pq = await litematicPrinter.progress_query(task, bot)
     //console.log(pq)
     // send analysis
@@ -640,6 +652,14 @@ async function mp_build(task) {
         }
         return mapartfinishEmbed;
     }
+
+
+    function csafe(message) {
+        if (message.indexOf("將繼續自然生成敵對生物") !== -1) {
+            csafe_success = true
+        }
+    }
+    
     function gen_mapartFinishEmbed() {
         let iconurl = `https://mc-heads.net/avatar/${bot.username}`
         let mapartfinishEmbed = {
