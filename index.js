@@ -572,6 +572,9 @@ function initBot(name,type) {
         case 'auto':
             bots.setBot(name, undefined, 'auto', 'general', debug,chat);
             break;
+        case 'material':
+            bots.setBot(name, undefined, 'material', 'general', debug,chat);
+            break
         default:
             console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
             break;

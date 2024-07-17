@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { Schematic } = require('prismarine-schematic');
 const { Vec3 } = require('vec3')
 const v = require('vec3')
+const path = require('path');
 const sd = require('silly-datetime');
 const nbt = require('prismarine-nbt')
 const promisify = f => (...args) => new Promise((resolve, reject) => f(...args, (err, res) => err ? reject(err) : resolve(res)))
@@ -21,7 +22,7 @@ const console = require('console');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const wait = () => new Promise(setImmediate)
 var whetherBuild = false, whetherPause = false, stop = false;
-let logger, mcData, bot_id, bot
+let logger, mcData, bot_id, bot, csafe_success = false
 // 地圖畫面向方向 (用於不同角度 圖工作等)
 let mp_direction = {
     "north": {  //2b
@@ -96,6 +97,25 @@ let mapart_cfg = {
         "wrap_button": [0, 0, 0]
     },
 }
+
+let Materialsdata = {
+    "stationName": "Bot",
+    "stationWarp": "example",
+    "stationServer": 1,
+    "offset": {
+        "N": [0, 1, -3],
+        "S": [0, 1, 3],
+        "W": [-3, 1, 0],
+        "E": [3, 1, 0],
+        "bN": [0, 1, -2],
+        "bS": [0, 1, 2],
+        "bW": [-2, 1, 0],
+        "bE": [2, 1, 0]
+    },
+    "overfull": [270, 24, -241, "E", "bE"],
+    "materials": []
+};
+
 let mapart_global_cfg = {
     "schematic_folder": "C:/Users/User/AppData/Roaming/.minecraft/schematics/",
     "discord_webhookURL": "https://discord.com/api/webhooks/1234567890123456789/abc",
@@ -144,6 +164,28 @@ const mapart = {
                 "set",
             ],
             execute: mp_set,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {//材料站生成
+            name: "地圖畫 材料站生成",
+            identifier: [
+                "material",
+                "m"
+            ],
+            execute: mp_material,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {//導出生成的材料站檔案
+            name: "地圖畫 材料站導出",
+            identifier: [
+                "file",
+                "f"
+            ],
+            execute: mp_file,
             vaild: true,
             longRunning: false,
             permissionRequre: 0,
@@ -422,8 +464,20 @@ async function mp_build(task) {
         console.log(`&7${mapart_build_cfg_cache.server} TAB 分流讀取失敗 請重試`)
         return
     }
+    
+    csafe_success = false
+    bot.chat('/csafe')
+    bot.on('messagestr', csafe)
+    while (!csafe_success) {
+        await bot.waitForTicks(30)
+        bot.chat('/csafe')
+    }
+    bot.off('messagestr', csafe)
+    
     //try {
     await litematicPrinter.build_file(task, bot, litematicPrinter.model_mapart, mapart_build_cfg_cache)
+
+    
     //let pq = await litematicPrinter.progress_query(task, bot)
     //console.log(pq)
     // send analysis
@@ -640,6 +694,14 @@ async function mp_build(task) {
         }
         return mapartfinishEmbed;
     }
+
+
+    function csafe(message) {
+        if (message.indexOf("將繼續自然生成敵對生物") !== -1) {
+            csafe_success = true
+        }
+    }
+    
     function gen_mapartFinishEmbed() {
         let iconurl = `https://mc-heads.net/avatar/${bot.username}`
         let mapartfinishEmbed = {
@@ -1223,6 +1285,86 @@ async function mp_name(task) {
             //console.log(etsIndex,bot.entities[etsIndex])
         }
     }
+}
+
+async function mp_material(task) {
+    let boxMode
+    let bottomMode
+    Materialsdata['stationServer'] = task.content[2]
+    Materialsdata['stationWarp'] = task.content[3]
+    let y = +task.content[5]
+    let z = +task.content[6]
+    let x = +task.content[4]
+
+
+
+    if (task.content[4] - task.content[7] === 0) {
+        if (bot.entity.position.x - task.content[4] > 1) {
+            boxMode = "E"
+            bottomMode = "bE"
+        }
+        if (bot.entity.position.x - task.content[4] < -1) {
+            boxMode = "W"
+            bottomMode = "bW"
+        }
+
+
+        for (z; z >= +task.content[9]; z--) {
+            for (let i = y - 5; i >= -64; i--) {
+                block = await bot.world.getBlock(new Vec3(x, i, z))
+                if (block.name === ('air' || 'cave_air' || 'bedrock')) {
+                    break
+                }
+                materialsPush = [block.name, [x, y, z, boxMode, bottomMode]]
+                console.log(materialsPush)
+                Materialsdata.materials.push(materialsPush);
+            }
+        }
+    }
+
+    if (task.content[6] - task.content[9] === 0) {
+        if (bot.entity.position.z - task.content[6] > 1) {
+            boxMode = "S"
+            bottomMode = "bS"
+        }
+        if (bot.entity.position.z - task.content[6] < -1) {
+            boxMode = "N"
+            bottomMode = "bN"
+        }
+
+
+        for (x; x >= (+task.content[7]); x--) {
+            for (let i = y - 5; i >= -64 ; i--) {
+                block = await bot.world.getBlock(new Vec3(x, i, z))
+                if (block.name === ('air' || 'cave_air' || 'bedrock')) {
+                    break
+                }
+                materialsPush = [block.name, [x, y, z, boxMode, bottomMode]]
+                console.log(materialsPush)
+                Materialsdata.materials.push(materialsPush);
+            }
+            
+
+        }
+    }
+
+    
+
+
+    await taskreply(task,
+        `&7[&bMP&7] &c已完成操作 &r使用mapart file導出`,
+        null,
+    );
+    return;
+}
+async function mp_file(task) {
+    const filePath = path.join('./', `${task.content[2]}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(Materialsdata, null, 2));
+    await taskreply(task,
+        `&7[&bMP&7] &c已輸出檔案${task.content[2]}.json &r請確認Bot檔案目錄`,
+        null,
+    );
+    return;
 }
 /**
  * Get mp item in inventory

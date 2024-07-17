@@ -18,7 +18,7 @@ const { version } = require("os");
 const CNTA = require('chinese-numbers-to-arabic');
 
 
-const registry = require("prismarine-registry")("1.20")
+const registry = require("prismarine-registry")("1.18.2")
 const ChatMessage = require("prismarine-chat")(registry);
 
 function logger(logToFile = false, type = "INFO", ...args) {
@@ -107,9 +107,9 @@ const bot = (() => { // createMcBot
         port: profiles[process.argv[2]].port,
         username: profiles[process.argv[2]].username,
         auth: "microsoft",
-        version: "1.20"
+        version: "1.18.2"
     })
-    const ChatMessage = require('prismarine-chat')("1.20")
+    const ChatMessage = require('prismarine-chat')("1.18.2")
     if (debug) {
         bot.on("windowOpen", async (window) => {
             //console.log(window)
