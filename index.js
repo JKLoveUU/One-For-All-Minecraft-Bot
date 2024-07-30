@@ -91,52 +91,47 @@ const bots = {
      * @return {botsInstance}
      */
     getBot(index) {
-        // logToFileAndConsole("DEBUG", "CONSOLE",`query the bot ${index}`);
         if (isNaN(index)) {
-            let i = this.name.indexOf(index)
-            if (i === -1) return -1
-            return this.bots[i]
+            return this.bots.find(bot => bot.name === index) || -1;
         }
-        if (index == -1) return -1;
-        if (index >= this.name.length) return -1
-        return this.bots[index]
+        return this.bots[index] || -1;
     },
-    setBot(name, child, type = null, crtType = null, debug,chat) {
-        if (this.name.indexOf(name) === -1) {
-            this.name.push(name)
-            this.bots.push(
-                {
-                    name: name,
-                    c: child,
-                    logTime: new Date(),
-                    status: 0,
-                    type: type,
-                    crtType: crtType,
-                    reloadCD: config.setting.reconnect_CD,
-                    debug: debug ? true : false,
-                    chat: chat ? true : false,
-                }
-            )
+    setBot(name, child, type = null, crtType = null, debug, chat) {
+        const index = this.name.indexOf(name);
+        if (index === -1) {
+            this.name.push(name);
+            this.bots.push({
+                name,
+                childProcess: child,
+                logTime: new Date(),
+                status: 0,
+                type,
+                crtType,
+                reloadCD: config.setting.reconnect_CD,
+                debug: !!debug,
+                chat: !!chat,
+            });
         } else {
-            this.bots[this.name.indexOf(name)].c = child;
-            this.bots[this.name.indexOf(name)].logTime = new Date();
-            if (type != null) this.bots[this.name.indexOf(name)].type = type;
-            if (crtType != null) this.bots[this.name.indexOf(name)].crtType = crtType;
-            if (debug != null) this.bots[this.name.indexOf(name)].debug = debug;
-            if (chat != null) this.bots[this.name.indexOf(name)].chat = chat;
+            const bot = this.bots[index];
+            bot.childProcess = child;
+            bot.logTime = new Date();
+            if (type !== null) bot.type = type;
+            if (crtType !== null) bot.crtType = crtType;
+            if (debug !== null) bot.debug = !!debug;
+            if (chat !== null) bot.chat = !!chat;
         }
     },
     setBotStatus(name, status) {
-        let b = this.getBot(name)
-        //console.log(b)
-        if (b === -1) return
-        b.status = status;
+        const bot = this.getBot(name);
+        if (bot !== -1) {
+            bot.status = status;
+        }
     },
     setBotReloadCD(name, cd = 10_000) {
-        let b = this.getBot(name)
-        //console.log(b)
-        if (b === -1) return
-        b.reloadCD = cd;
+        const bot = this.getBot(name);
+        if (bot !== -1) {
+            bot.reloadCD = cd;
+        }
     },
     /**
      * 用於設定crtType
@@ -145,167 +140,150 @@ const bots = {
      * @returns 
      */
     setBotCrtType(name, crtType) {
-        let b = this.getBot(name)
-        //console.log(b)
-        if (b === -1) return
-        b.crtType = crtType;
-    },
-    async getBotInfo(index) {
-        let crt;
-        if (isNaN(index)) {
-            let i = this.name.indexOf(index)
-            if (i === -1) crt = -1
-            crt = this.bots[i]
-        } else if (index >= this.name.length) crt = -1
-        else crt = this.bots[index]
-        if (crt == -1) {
-            return -1
-        } else {
-            //console.log('data rqing ...')
-            d = await this.getBotData(crt.name)
-            // TO-DO 這裡需要加上錯誤處理
-            //console.log(d)
-            let botinfo = {
-                id: crt.name,
-                name: d.name,
-                avatar: `https://mc-heads.net/avatar/${d.name}/64`,
-                server: d.server,
-                coin: d.coin,
-                balance: d.balance,
-                position: d.position,
-                tasks: d.tasks,
-                runingTask: d.runingTask
-            };
-            return botinfo
+        const bot = this.getBot(name);
+        if (bot !== -1) {
+            bot.crtType = crtType;
         }
+    },
+    async getBotInfo(name) {
+        const bot = this.getBot(name);
+        if (bot === -1) {
+            return -1;
+        }
+        const data = await this.getBotData(bot.name);
+        const botinfo = {
+            id: bot.name,
+            name: data.name,
+            avatar: `https://mc-heads.net/avatar/${data.name}/64`,
+            server: data.server,
+            coin: data.coin,
+            balance: data.balance,
+            position: data.position,
+            tasks: data.tasks,
+            runingTask: data.runingTask
+        };
+        return botinfo;
     },
     async getBotData(name) {
-        let crt;
-        if (isNaN(name)) {
-            let i = this.name.indexOf(name)
-            if (i === -1) crt = -1
-            crt = this.bots[i]
-        } else if (name >= this.name.length) crt = -1
-        else crt = this.bots[name]
-        if (crt == -1) {
-            return -1
+        const bot = this.getBot(name);
+        if (bot === -1) {
+            return -1;
         }
         return new Promise((resolve, reject) => {
-            var timer = setTimeout(() => {
-                // console.log('data Time out',name)
-                bots.handle.off('data', setdata);
-                reject()
-            }, 100)
-            bots.handle.on('data', setdata)
-            crt.c.send({ type: 'dataRequire' });
-            function setdata(data, nm) {
-                if (name != nm) return;
-                clearTimeout(timer)
-                // console.log('getData',name)
-                bots.handle.off('data', setdata);
-                resolve(data);
-            }
-        })
+            const timer = setTimeout(() => {
+                reject();
+            }, 100);
+            this.handle.once('data', (data, nm) => {
+                if (name === nm) {
+                    clearTimeout(timer);
+                    resolve(data);
+                }
+            });
+            bot.childProcess.send({ type: 'dataRequire' });
+        });
     }
 };
-let currentSelect = -1;
+let currentSelect = 0;
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer: (line) => {
         const completions = ['.switch', '.list', '.create','.exit', '.close', '.reload', '.ff', '.eval'];
-        const hits = completions.filter((c) => c.startsWith(line));
+        const hits = completions.filter((childProcess) => childProcess.startsWith(line));
         return [hits.length ? hits : completions, line];
     },
 });
 
 function addEventHandler() {
     rl.on('line', async (input) => {
-        let cs = bots.getBot(currentSelect)
-        //console.log(cs)
+        let selectedBot = bots.getBot(currentSelect);
+        //console.log(selectedBot)
         if (input.startsWith('.')) {
             const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
-            // console.log(`收到指令 ${rlCommandName}`)
+            // console.log(`Received command ${rlCommandName}`)
             switch (rlCommandName.substring(1)) {
+                // Create a new bot
                 case 'create':
                     initBot(rlargs[0]);
                     break;
-                case 'ff':    //debug
-                    process.exit(0)
+                // Force close the bot
+                case 'ff':    
+                    process.exit(0);
                     break;
+                // List all bots
                 case 'list':
-                    const longestLength = bots.name.reduce((longest, a) => {
-                        return a.length > longest ? a.length : longest;
-                    }, 0);
-                    console.log(`目前共 ${bots.name.length} 隻bot`)
-                    console.log((`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status|Type   |CrtType')
-                    for (i in bots.name) {
-                        console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${(bots.bots[i].status).toString().padEnd(6, ' ')} ${bots.bots[i].type ? (bots.bots[i].type).padEnd(7, ' ') : '-'.padEnd(7, ' ')} ${bots.bots[i].crtType ? bots.bots[i].crtType.padEnd(7, ' ') : '-'.padEnd(7, ' ')}`)
-                    }
+                    const typeLength = 7;
+                    const crtTypeLength = 7; 
+
+                    console.log(`Total ${bots.name.length} bots`);
+                    console.log(`Id | Bot | Status | Type | CrtType`);
+
+                    bots.name.forEach((name, i) => {
+                        const bot = bots.getBot(name);
+                        console.log(`${i} | ${name} | ${botstatus[bot.status]} | ${bot.type ? bot.type.padEnd(typeLength) : '-'.padEnd(typeLength)} | ${bot.crtType ? bot.crtType.padEnd(crtTypeLength) : '-'.padEnd(crtTypeLength)}`);
+                    });
                     break;
+                // Close the bot
                 case 'exit':
-                    if (cs == -1) {
-                        console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
+                    if (selectedBot == -1) {
+                        console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
-                        cs.c.send({ type: "exit", });
+                        selectedBot.childProcess.send({ type: "exit" });
                         currentSelect = -1;
                         process.title = '[Bot][-1] type .switch to select a bot';
                     }
                     break;
+                // Reload the bot
                 case 'reload':
-                    if (cs == -1) {
-                        console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
+                    if (selectedBot == -1) {
+                        console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
-                        cs.c.send({ type: "reload", });
+                        selectedBot.childProcess.send({ type: "reload" });
                     }
                     break;
+                // Test
                 case 'test':
                     logToFileAndConsole("INFO", "CONSOLE", rlargs);
                     break;
+                // Switch to another bot
                 case 'switch':
-                    let tmp = parseInt(rlargs[0], 10);
-                    if (tmp > bots.name.length && tmp == undefined) {
-                        console.log("index err")
-                        return
+                    const botIndex = parseInt(rlargs[0], 10);
+                    if (isNaN(botIndex) || botIndex >= bots.name.length || botIndex < 0) {
+                        console.log("Invalid bot index. Usage: .switch <botIndex>");
+                        return;
                     }
-                    currentSelect = tmp;
-                    process.title = `[Bot][${rlargs[0]} ${bots.getBot(tmp).name}] type .switch to select a bot`
-                    console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
+                    currentSelect = botIndex;
+                    const selectedBot = bots.getBot(botIndex);
+                    process.title = `[Bot][${botIndex} ${selectedBot.name}] Use .switch to select a bot`;
+                    console.log(`Switched to bot [${botIndex} - ${selectedBot.name}].`);
                     break;
                 default:
-                    if (cs == -1 || cs == undefined) {
-                        console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
-                    } else if (cs.c == undefined && cs.status == 0) {
-                        console.log(`該 bot 未啟動 use .switch to select a bot`);
-                    } else if (cs.c == undefined) {
-                        console.log(`該 bot 不再線上請稍後在試`);
-            
+                    if (selectedBot == -1 || selectedBot == undefined) {
+                        console.log(`No bot selected. Use .switch to select a bot.`);
+                    } else if (selectedBot.childProcess == undefined && selectedBot.status == 0) {
+                        console.log(`The bot is not started. Use .switch to select a bot.`);
+                    } else if (selectedBot.childProcess == undefined) {
+                        console.log(`The bot is not online. Please try again later.`);
                     } else {
-                        cs.c.send({ type: "cmd", text: input });
+                        selectedBot.childProcess.send({ type: "cmd", text: input });
                     }
                     //console.log(`unknown command '${rlCommandName.substring(1)}'`);
                     break;
             }
         } else {
-            if (cs == -1 || cs == undefined) {
-                console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
-            } else if (cs.c == undefined && cs.status == 0) {
-                console.log(`該 bot 未啟動 use .switch to select a bot`);
-            } else if (cs.c == undefined) {
-                console.log(`該 bot 不再線上請稍後在試`);
-    
+            if (selectedBot == -1 || selectedBot == undefined) {
+                console.log(`No bot selected. Use .switch to select a bot.`);
+            } else if (selectedBot.childProcess == undefined && selectedBot.status == 0) {
+                console.log(`The bot is not started. Use .switch to select a bot.`);
+            } else if (selectedBot.childProcess == undefined) {
+                console.log(`The bot is not online. Please try again later.`);
             } else {
-                cs.c.send({ type: "chat", text: input });
+                selectedBot.childProcess.send({ type: "chat", text: input });
             }
         }
         rl.prompt();
     });
     rl.on('close', async () => {
-        //console.log('退出readLine');
-        // setTimeout(() => {
-        //     rl.prompt();
-        //     console.log("rl")
-        // }, 3000);
         await handleClose()
     });
     client.on('ready', async () => {
@@ -493,9 +471,7 @@ function main() {
     logToFileAndConsole("INFO", "CONSOLE", `Press Ctrl+C to exit   PID: ${process.pid}`);
     logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
     // console.log(config.account.id)
-    currentSelect = 0;
     addEventHandler();
-    rl.prompt();
     try{
         client.login(config.discord_setting.token)
     }catch(err){
@@ -504,18 +480,20 @@ function main() {
     process.title = '[Bot][-1] type .switch to select a bot';
     let timerdelay = 3005;
     config.account.id.forEach((id, index) => {
+        // id is a string
         setTimeout(() => {
             initBot(id);
             createBot(id);
             timerdelay += 200;
         }, timerdelay);
     });
+    rl.prompt();
 }
 async function handleClose() {
     logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
     for (i in bots.name) {
-        if (bots.bots[i].c == undefined) continue
-        bots.bots[i].c.send({ type: "exit" });
+        if (bots.bots[i].childProcess == undefined) continue
+        bots.bots[i].childProcess.send({ type: "exit" });
     }
     await Promise.all([
         setBotMenuNotInService(),
@@ -590,14 +568,14 @@ function createBot(name) {
         console.log(`Error from ${name}:\n${e}`)
     })
     child.send({ type: 'init', config: config })
-    child.on('close', c => {
-        logToFileAndConsole('WARN', name,`Exit code: ${exitcode[c]} (${c})`)
+    child.on('close', childProcess => {
+        logToFileAndConsole('WARN', name,`Exit code: ${exitcode[childProcess]} (${childProcess})`)
         child.removeAllListeners()
         bots.setBot(name, undefined)
-        if (c == 0) console.log(`${name}: stopped success`)
-        else if (c >= 2000) {
-            logToFileAndConsole("ERROR", name, `closed with err code: ${c}`)
-        } else if(c == 202){
+        if (childProcess == 0) console.log(`${name}: stopped success`)
+        else if (childProcess >= 2000) {
+            logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`)
+        } else if(childProcess == 202){
             logToFileAndConsole("ERROR", name, `設定檔案錯誤 已停止重啟`)
             console.log("請使用 .create <botname> 再次開啟bot")
         }else {
@@ -630,6 +608,8 @@ function createBot(name) {
                 // console.log(m.value)
                 bots.handle.emit('data', m.value, name)
                 break
+            default:
+                console.log(`Unknown message type ${m.type} from ${name}`)
         }
     })
 
