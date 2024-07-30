@@ -12,17 +12,7 @@ const sd = require('silly-datetime');
 // configs
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
-var profiles
-try{
-    profiles = require(`${process.cwd()}/profiles.json`);
-}catch(err){
-    console.log(`帳號設定檔讀取失敗\nFilePath: ${process.cwd()}/profiles.json`)
-    console.log("Please Check The Json Format")
-    console.log(`Error Msg: \x1b[31m${err.message}\x1b[0m`)
-    console.log("You can visit following websites the fix: ")
-    console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
-    console.log(`\x1b[33mhttps://www.google.com/search?q=${(err.message).replaceAll(" ","+")}\x1b[0m`)
-}
+
 const { Vec3 } = require('vec3')
 const EventEmitter = require('events');
 
@@ -34,21 +24,35 @@ const { Client, Intents, MessageActionRow, MessageButton, MessageOptions, Messag
 const rest = new REST({ version: '9' }).setToken(config.discord_setting.token);
 const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 let botMenuId = undefined;
-let botMenuLastUpdate = new Date();
 
 //
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
 //const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync('logs')) {
-    fs.mkdirSync('logs');
+function checkPaths(){
+    if (!fs.existsSync('logs')) {
+        fs.mkdirSync('logs');
+    }
+    if (!fs.existsSync(`config/global`)) {
+        fs.mkdirSync(`config/global`, { recursive: true });
+    }
 }
-if (!fs.existsSync(`config/global`)) {
-    fs.mkdirSync(`config/global`, { recursive: true });
+function loadProfiles() {
+    const profilesPath = path.join(process.cwd(), 'profiles.json');
+    try {
+        return require(profilesPath);
+    } catch (err) {
+        console.error(`帳號設定檔讀取失敗\nFilePath: ${profilesPath}`);
+        console.error("Please Check The Json Format");
+        console.error(`Error Msg: \x1b[31m${err.message}\x1b[0m`);
+        console.error("You can visit following websites to fix:");
+        console.error(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`);
+        console.error(`\x1b[33mhttps://www.google.com/search?q=${encodeURIComponent(err.message)}\x1b[0m`);
+        return null;
+    }
 }
-//const logFilePath = path.join(logsDir, "lastest" + ".log");
-const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
 function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
+    const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
     let arg = args.join(' ')
     let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')      //會太長嗎?
     switch (type) {
@@ -77,8 +81,6 @@ function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
     logFile.write(nclog + "\n");
 }
 
-const dataManager = {
-}
 const bots = {
     name: [],
     bots: [],
@@ -206,333 +208,311 @@ const bots = {
         })
     }
 };
-//const dc = require("./lib/discordManager")(config,dataManager,bots);
 let currentSelect = -1;
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    // completer: (line) => {
-    //     const completions = ['.switch', '.list','.exit', '.close', '.reload', '.ff', '.eval', '.test',];
-    //     const hits = completions.filter((c) => c.startsWith(line));
-    //     return [hits.length ? hits : completions, line];
-    // },
     completer: (line) => {
         const completions = ['.switch', '.list', '.create','.exit', '.close', '.reload', '.ff', '.eval'];
         const hits = completions.filter((c) => c.startsWith(line));
-        // if (line.startsWith('.file ')) {
-        //     const dirPath = 'C:\\Users\\User\\AppData\\Roaming\\.minecraft\\schematics\\t\\';
-        //     try {
-        //         const files = fs.readdirSync(dirPath);
-        //         return [files.map((f) => `.file ${f}`), line];
-        //     } catch (err) {
-        //         // Handle error
-        //     }
-        // }
         return [hits.length ? hits : completions, line];
     },
 });
-rl.prompt();
-rl.on('line', async (input) => {
-    let cs = bots.getBot(currentSelect)
-    //console.log(cs)
-    if (input.startsWith('.')) {
-        const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
-        // console.log(`收到指令 ${rlCommandName}`)
-        switch (rlCommandName.substring(1)) {
-            case 'create':
-                initBot(rlargs[0]);
-                break;
-            case 'ff':    //debug
-                process.exit(0)
-                break;
-            case 'list':
-                const longestLength = bots.name.reduce((longest, a) => {
-                    return a.length > longest ? a.length : longest;
-                }, 0);
-                console.log(`目前共 ${bots.name.length} 隻bot`)
-                console.log((`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status|Type   |CrtType')
-                for (i in bots.name) {
-                    console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${(bots.bots[i].status).toString().padEnd(6, ' ')} ${bots.bots[i].type ? (bots.bots[i].type).padEnd(7, ' ') : '-'.padEnd(7, ' ')} ${bots.bots[i].crtType ? bots.bots[i].crtType.padEnd(7, ' ') : '-'.padEnd(7, ' ')}`)
-                }
-                break;
-            case 'exit':
-                if (cs == -1) {
-                    console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
-                } else {
-                    cs.c.send({ type: "exit", });
-                    currentSelect = -1;
-                    process.title = '[Bot][-1] type .switch to select a bot';
-                }
-                break;
-            case 'reload':
-                if (cs == -1) {
-                    console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
-                } else {
-                    cs.c.send({ type: "reload", });
-                }
-                break;
-            case 'test':
-                logToFileAndConsole("INFO", "CONSOLE", rlargs);
-                break;
-            case 'switch':
-                let tmp = parseInt(rlargs[0], 10);
-                if (tmp > bots.name.length && tmp == undefined) {
-                    console.log("index err")
-                    return
-                }
-                currentSelect = tmp;
-                process.title = `[Bot][${rlargs[0]} ${bots.getBot(tmp).name}] type .switch to select a bot`
-                console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
-                break;
-            default:
-                if (cs == -1 || cs == undefined) {
-                    console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
-                } else if (cs.c == undefined && cs.status == 0) {
-                    console.log(`該 bot 未啟動 use .switch to select a bot`);
-                } else if (cs.c == undefined) {
-                    console.log(`該 bot 不再線上請稍後在試`);
-        
-                } else {
-                    cs.c.send({ type: "cmd", text: input });
-                }
-                //console.log(`unknown command '${rlCommandName.substring(1)}'`);
-                break;
-        }
-    } else {
-        if (cs == -1 || cs == undefined) {
-            console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
-        } else if (cs.c == undefined && cs.status == 0) {
-            console.log(`該 bot 未啟動 use .switch to select a bot`);
-        } else if (cs.c == undefined) {
-            console.log(`該 bot 不再線上請稍後在試`);
 
+function addEventHandler() {
+    rl.on('line', async (input) => {
+        let cs = bots.getBot(currentSelect)
+        //console.log(cs)
+        if (input.startsWith('.')) {
+            const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
+            // console.log(`收到指令 ${rlCommandName}`)
+            switch (rlCommandName.substring(1)) {
+                case 'create':
+                    initBot(rlargs[0]);
+                    break;
+                case 'ff':    //debug
+                    process.exit(0)
+                    break;
+                case 'list':
+                    const longestLength = bots.name.reduce((longest, a) => {
+                        return a.length > longest ? a.length : longest;
+                    }, 0);
+                    console.log(`目前共 ${bots.name.length} 隻bot`)
+                    console.log((`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status|Type   |CrtType')
+                    for (i in bots.name) {
+                        console.log(`${i}. ${bots.name[i].padEnd(longestLength, ' ')} ${(bots.bots[i].status).toString().padEnd(6, ' ')} ${bots.bots[i].type ? (bots.bots[i].type).padEnd(7, ' ') : '-'.padEnd(7, ' ')} ${bots.bots[i].crtType ? bots.bots[i].crtType.padEnd(7, ' ') : '-'.padEnd(7, ' ')}`)
+                    }
+                    break;
+                case 'exit':
+                    if (cs == -1) {
+                        console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
+                    } else {
+                        cs.c.send({ type: "exit", });
+                        currentSelect = -1;
+                        process.title = '[Bot][-1] type .switch to select a bot';
+                    }
+                    break;
+                case 'reload':
+                    if (cs == -1) {
+                        console.log(`未選擇 無法執行該命令 use .switch to select a bot`);
+                    } else {
+                        cs.c.send({ type: "reload", });
+                    }
+                    break;
+                case 'test':
+                    logToFileAndConsole("INFO", "CONSOLE", rlargs);
+                    break;
+                case 'switch':
+                    let tmp = parseInt(rlargs[0], 10);
+                    if (tmp > bots.name.length && tmp == undefined) {
+                        console.log("index err")
+                        return
+                    }
+                    currentSelect = tmp;
+                    process.title = `[Bot][${rlargs[0]} ${bots.getBot(tmp).name}] type .switch to select a bot`
+                    console.log(`switch to bot [${rlargs[0]} - ${bots.getBot(tmp).name}].`)
+                    break;
+                default:
+                    if (cs == -1 || cs == undefined) {
+                        console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
+                    } else if (cs.c == undefined && cs.status == 0) {
+                        console.log(`該 bot 未啟動 use .switch to select a bot`);
+                    } else if (cs.c == undefined) {
+                        console.log(`該 bot 不再線上請稍後在試`);
+            
+                    } else {
+                        cs.c.send({ type: "cmd", text: input });
+                    }
+                    //console.log(`unknown command '${rlCommandName.substring(1)}'`);
+                    break;
+            }
         } else {
-            cs.c.send({ type: "chat", text: input });
-        }
-    }
-    rl.prompt();
-});
-rl.on('close', async () => {
-    //console.log('退出readLine');
-    // setTimeout(() => {
-    //     rl.prompt();
-    //     console.log("rl")
-    // }, 3000);
-    await handleClose()
-});
-client.on('ready', async () => {
-    logToFileAndConsole("INFO", "CONSOLE", `Discord bot Logged in as ${client.user.tag}`);
-    client.user.setPresence({
-        activities: [{
-            name: 'Minecraft',
-            type: 1,
-            url: 'https://www.twitch.tv/nacho_dayo',
-        }],
-        status: 'online',
-    });
-    const channel = client.channels.cache.get(config.discord_setting.channelId);
-    //delete all old bot menu
-    const botMenuIds = [];
-    await channel.messages.fetch({ limit: 30 }).then(messages => {
-        const botMessages = messages.filter(m => m.author.id === client.user.id && m.author.bot);
-        const matchingMessages = botMessages.filter(m => {
-            if (m.embeds && m.embeds.length > 0 && (Date.now() - m.createdTimestamp < 13 * 24 * 60 * 60 * 1000)) {
-                const firstEmbed = m.embeds[0];
-                const matchingField = firstEmbed.fields.find(field => field.name.startsWith('目前共'));
-                return (matchingField !== undefined);
+            if (cs == -1 || cs == undefined) {
+                console.log(`未選擇 無法輸入聊天 use .switch to select a bot`);
+            } else if (cs.c == undefined && cs.status == 0) {
+                console.log(`該 bot 未啟動 use .switch to select a bot`);
+            } else if (cs.c == undefined) {
+                console.log(`該 bot 不再線上請稍後在試`);
+    
             } else {
-                return false;
+                cs.c.send({ type: "chat", text: input });
+            }
+        }
+        rl.prompt();
+    });
+    rl.on('close', async () => {
+        //console.log('退出readLine');
+        // setTimeout(() => {
+        //     rl.prompt();
+        //     console.log("rl")
+        // }, 3000);
+        await handleClose()
+    });
+    client.on('ready', async () => {
+        logToFileAndConsole("INFO", "CONSOLE", `Discord bot Logged in as ${client.user.tag}`);
+        client.user.setPresence({
+            activities: [{
+                name: 'Minecraft',
+                type: 1,
+                url: 'https://www.twitch.tv/nacho_dayo',
+            }],
+            status: 'online',
+        });
+        const channel = client.channels.cache.get(config.discord_setting.channelId);
+        //delete all old bot menu
+        const botMenuIds = [];
+        await channel.messages.fetch({ limit: 30 }).then(messages => {
+            const botMessages = messages.filter(m => m.author.id === client.user.id && m.author.bot);
+            const matchingMessages = botMessages.filter(m => {
+                if (m.embeds && m.embeds.length > 0 && (Date.now() - m.createdTimestamp < 13 * 24 * 60 * 60 * 1000)) {
+                    const firstEmbed = m.embeds[0];
+                    const matchingField = firstEmbed.fields.find(field => field.name.startsWith('目前共'));
+                    return (matchingField !== undefined);
+                } else {
+                    return false;
+                }
+            });
+            //console.log(matchingMessages)
+            if (matchingMessages) {
+                matchingMessages.forEach(msg => {
+                    // console.log(msg)
+                    botMenuIds.push(msg.id);
+                });
+            } else {
             }
         });
-        //console.log(matchingMessages)
-        if (matchingMessages) {
-            matchingMessages.forEach(msg => {
-                // console.log(msg)
-                botMenuIds.push(msg.id);
-            });
+        channel.bulkDelete(botMenuIds)
+            .then(deletedMessages => logToFileAndConsole("INFO", "CONSOLE", `Deleted ${deletedMessages.size} expired Menu`))
+            .catch(console.error);
+        let newbotMenuId = await channel.send(generateBotMenu());
+        botMenuId = newbotMenuId.id
+        setInterval(async () => {
+            let channel = client.channels.cache.get(config.discord_setting.channelId);  //error here bug
+            let oldmenu = await getChannelMsgFetch(channel, botMenuId)
+            //console.log(oldmenu)
+            if (oldmenu) {
+                await oldmenu.edit(generateBotMenu());
+            } else {
+                console.log(oldmenu)
+                let newbotMenuId = await channel.send(generateBotMenu());
+                botMenuId = newbotMenuId.id
+            }
+        }, 30_000);
+    });
+    //botmenu handler 
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isCommand()) return
+        //  console.log(interaction)
+        if (!interaction.customId.startsWith('botmenu')) {
+            return
+        }
+        console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+        if (!discordWhiteListCheck(interaction.member)) {
+            await noPermission(interaction);
+            return
+        }
+        if (interaction.isButton()) {
+            switch (interaction.customId) {
+                case 'botmenu-refresh-btn':
+                    await interaction.update(generateBotMenu());
+                    break;
+                case 'botmenu-shift-btn':
+                    const message = await interaction.channel.messages.fetch(interaction.message.id);
+                    let newbotMenuId = await interaction.channel.send(generateBotMenu());
+                    botMenuId = newbotMenuId.id
+                    await message.delete();
+                    break;
+                case 'botmenu-close-btn':
+                    const closeConfirmButon = interaction.component
+                        .setCustomId('botmenu-close-confirm-btn')
+                        .setLabel('Click Again To close')
+                        .setStyle('DANGER')
+                        .setEmoji('⚪');
+                    const [row1, row2] = interaction.message.components;
+                    await interaction.update({
+                        components: [
+                            new MessageActionRow().addComponents(row1.components),
+                            new MessageActionRow().addComponents(row2.components),
+                        ],
+                    });
+    
+                    break;
+                case 'botmenu-close-confirm-btn':
+                    await interaction.reply({
+                        content: 'bot closing',
+                        ephemeral: true
+                    })
+                    console.log(`Bot close by Discord - ${interaction.user.username}`)
+                    await handleClose()
+                    break;
+                default:
+                    await notImplemented(interaction);
+                    break;
+            }
+        } else if (interaction.isSelectMenu()) {
+            const { customId, values } = interaction;
+            if (customId === 'botmenu-select') {
+                targetBot = values[0].slice(15)
+                console.log(targetBot)
+                let targetBotIns = bots.getBot(targetBot)
+                if (targetBotIns === -1) {
+                    console.log("err at open menu for bot", targetBot)
+                    await interaction.reply({
+                        content: `err at open menu for bot ${targetBot}`,
+                        ephemeral: true
+                    })
+                    return
+                }
+                //need check status here
+                if (targetBotIns.status == 2200) {
+                    await interaction.reply({
+                        content: 'Menu For Raid Not Implemented',
+                        ephemeral: true
+                    })
+                    return
+                    let botinfo = await bots.getBotInfo(targetBot)
+                    interaction.reply(generateRaidBotControlMenu(botinfo))
+                } else if (targetBotIns.status >= 3200) {
+                    let botinfo = await bots.getBotInfo(targetBot)
+                    interaction.reply(generateGeneralBotControlMenu(botinfo))
+                    return
+                }
+                await interaction.reply({
+                    content: 'Bot is not running, try it later',
+                    ephemeral: true
+                })
+    
+            } else await notImplemented(interaction);
         } else {
+            await notImplemented(interaction);
+        }
+    
+    });
+    //generalbotcontrolmenu handler
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isCommand()) return
+        //  console.log(interaction)
+        if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
+            return
+        }
+        console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+        if (!discordWhiteListCheck(interaction.member)) {
+            await noPermission(interaction);
+            return
+        }
+        if (interaction.isButton()) {
+            switch (interaction.customId) {
+                case 'generalbotcontrolmenu-close-btn':
+                    await interaction.message.delete();
+                    break;
+                default:
+                    await notImplemented(interaction);
+                    break;
+            }
+        } else if (interaction.isSelectMenu()) {
+            const { customId, values } = interaction;
+            if (customId === 'botmenu-select') {
+                console.log(values[0])
+                await notImplemented(interaction);
+            } else await notImplemented(interaction);
+        } else {
+            await notImplemented(interaction);
         }
     });
-    channel.bulkDelete(botMenuIds)
-        .then(deletedMessages => logToFileAndConsole("INFO", "CONSOLE", `Deleted ${deletedMessages.size} expired Menu`))
-        .catch(console.error);
-    let newbotMenuId = await channel.send(generateBotMenu());
-    botMenuId = newbotMenuId.id
-    setInterval(async () => {
-        let channel = client.channels.cache.get(config.discord_setting.channelId);  //error here bug
-        let oldmenu = await getChannelMsgFetch(channel, botMenuId)
-        //console.log(oldmenu)
-        if (oldmenu) {
-            await oldmenu.edit(generateBotMenu());
-        } else {
-            console.log(oldmenu)
-            let newbotMenuId = await channel.send(generateBotMenu());
-            botMenuId = newbotMenuId.id
-        }
-    }, 30_000);
-});
-//botmenu handler 
-client.on('interactionCreate', async (interaction) => {
-    if (interaction.isCommand()) return
-    //  console.log(interaction)
-    if (!interaction.customId.startsWith('botmenu')) {
-        return
-    }
-    console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
-    if (!discordWhiteListCheck(interaction.member)) {
-        await noPermission(interaction);
-        return
-    }
-    if (interaction.isButton()) {
-        switch (interaction.customId) {
-            case 'botmenu-refresh-btn':
-                await interaction.update(generateBotMenu());
-                break;
-            case 'botmenu-shift-btn':
-                const message = await interaction.channel.messages.fetch(interaction.message.id);
-                let newbotMenuId = await interaction.channel.send(generateBotMenu());
-                botMenuId = newbotMenuId.id
-                await message.delete();
-                break;
-            case 'botmenu-close-btn':
-                const closeConfirmButon = interaction.component
-                    .setCustomId('botmenu-close-confirm-btn')
-                    .setLabel('Click Again To close')
-                    .setStyle('DANGER')
-                    .setEmoji('⚪');
-                const [row1, row2] = interaction.message.components;
-                await interaction.update({
-                    components: [
-                        new MessageActionRow().addComponents(row1.components),
-                        new MessageActionRow().addComponents(row2.components),
-                    ],
-                });
-
-                break;
-            case 'botmenu-close-confirm-btn':
-                await interaction.reply({
-                    content: 'bot closing',
-                    ephemeral: true
-                })
-                console.log(`Bot close by Discord - ${interaction.user.username}`)
-                await handleClose()
-                break;
-            default:
-                await notImplemented(interaction);
-                break;
-        }
-    } else if (interaction.isSelectMenu()) {
-        const { customId, values } = interaction;
-        if (customId === 'botmenu-select') {
-            targetBot = values[0].slice(15)
-            console.log(targetBot)
-            let targetBotIns = bots.getBot(targetBot)
-            if (targetBotIns === -1) {
-                console.log("err at open menu for bot", targetBot)
-                await interaction.reply({
-                    content: `err at open menu for bot ${targetBot}`,
-                    ephemeral: true
-                })
-                return
-            }
-            //need check status here
-            if (targetBotIns.status == 2200) {
-                await interaction.reply({
-                    content: 'Menu For Raid Not Implemented',
-                    ephemeral: true
-                })
-                return
-                let botinfo = await bots.getBotInfo(targetBot)
-                interaction.reply(generateRaidBotControlMenu(botinfo))
-            } else if (targetBotIns.status >= 3200) {
-                let botinfo = await bots.getBotInfo(targetBot)
-                interaction.reply(generateGeneralBotControlMenu(botinfo))
-                return
-            }
-            await interaction.reply({
-                content: 'Bot is not running, try it later',
-                ephemeral: true
-            })
-
-        } else await notImplemented(interaction);
-    } else {
-        await notImplemented(interaction);
-    }
-
-});
-//generalbotcontrolmenu handler
-client.on('interactionCreate', async (interaction) => {
-    if (interaction.isCommand()) return
-    //  console.log(interaction)
-    if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
-        return
-    }
-    console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
-    if (!discordWhiteListCheck(interaction.member)) {
-        await noPermission(interaction);
-        return
-    }
-    if (interaction.isButton()) {
-        switch (interaction.customId) {
-            case 'generalbotcontrolmenu-close-btn':
-                await interaction.message.delete();
-                break;
-            default:
-                await notImplemented(interaction);
-                break;
-        }
-    } else if (interaction.isSelectMenu()) {
-        const { customId, values } = interaction;
-        if (customId === 'botmenu-select') {
-            console.log(values[0])
-            await notImplemented(interaction);
-        } else await notImplemented(interaction);
-    } else {
-        await notImplemented(interaction);
-    }
-});
-process.on('uncaughtException', err => {
-    logToFileAndConsole("ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
-    // console.log('Uncaught:\n', err)
-    console.log('PID:', process.pid)
-});
-
-process.on('SIGINT', handleClose);
-process.on('SIGTERM', handleClose);
-console.log(`Press Ctrl+C to exit   PID: ${process.pid}`);
-//logToFileAndConsole("INFO", "CONSOLE", "\nBy using the software, you are agreeing to be bound by the terms of EULA");
-logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
-try{
-    client.login(config.discord_setting.token)
-}catch(err){
-    logToFileAndConsole("ERROR", "DISCORD", `Discord Bot Login 失敗\n${err.message}`)
+    process.on('uncaughtException', err => {
+        logToFileAndConsole("ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
+        // console.log('Uncaught:\n', err)
+        console.log('PID:', process.pid)
+    });
+    process.on('SIGINT', handleClose);
+    process.on('SIGTERM', handleClose);
 }
 
-main()
 function main() {
-    console.log(config.account.id)
+    checkPaths();
+    logToFileAndConsole("INFO", "CONSOLE", `Press Ctrl+C to exit   PID: ${process.pid}`);
+    logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
+    // console.log(config.account.id)
     currentSelect = 0;
+    addEventHandler();
+    rl.prompt();
+    try{
+        client.login(config.discord_setting.token)
+    }catch(err){
+        logToFileAndConsole("ERROR", "DISCORD", `Discord Bot Login 失敗\n${err.message}`)
+    }
     process.title = '[Bot][-1] type .switch to select a bot';
     let timerdelay = 3005;
-    //get type  and set of all bot
-    // type: auto raid general
-    //sleep(5000)
-    for (i in config.account) {
-        //console.log(config.account[i])
-    }
-    for (let i = 0; i < config.account.id.length; i++) {
+    config.account.id.forEach((id, index) => {
         setTimeout(() => {
-            //console.log(i)
-            //console.log(config.account.id[i])
-            //createBot(config.account.id[i])
-            initBot(config.account.id[i]);
-            //createGeneralBot(config.account.id[i]);
+            initBot(id);
+            createBot(id);
             timerdelay += 200;
         }, timerdelay);
-    }
+    });
 }
 async function handleClose() {
-    console.log('Closing application...');
+    logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
     for (i in bots.name) {
         if (bots.bots[i].c == undefined) continue
         bots.bots[i].c.send({ type: "exit" });
@@ -540,17 +520,14 @@ async function handleClose() {
     await Promise.all([
         setBotMenuNotInService(),
         sleep(1000 + bots.name.length * 200),
-        // new Promise(resolve => setTimeout(resolve, 1000)), // wait for 1 second
-        // wait for all promises to complete
-        //unregisterCommands(client)
-        //anotherAsyncFunction()
     ]);
-    console.log('Close finished');
+    logToFileAndConsole("INFO", "CONSOLE", "Close finished");
     client.destroy();
     process.exit(0);
 }
-function initBot(name,type) {
+function initBot(name) {
     bots.setBot(name, undefined);
+    const profiles = loadProfiles();
     if (!profiles[name]) {
         bots.setBotStatus(name, 1000)
         logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`)
@@ -579,7 +556,6 @@ function initBot(name,type) {
             console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
             break;
     }
-    createBot(name);
 }
 /**
  * create Bot with the crtType
@@ -983,3 +959,5 @@ const botstatus = {
 
     //    process.send({ type: 'setStatus', value: 1000 })
 };
+
+main();
