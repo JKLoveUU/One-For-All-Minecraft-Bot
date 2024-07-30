@@ -67,11 +67,11 @@ function logger(logToFile = false, type = "INFO", ...args) {
 //console.log(commands.length)
 //lib
 //這裡應該改成從lib自動載入 加入commands 並init
-const template = require(`./src/mapart`);
-const mapart = require(`./src/mapart`);
-const craftAndExchange = require(`./src/craftAndExchange`);
+const template = require(`../src/mapart`);
+const mapart = require(`../src/mapart`);
+const craftAndExchange = require(`../src/craftAndExchange`);
 const commands = [mapart, craftAndExchange, template]
-const basicCommand = require(`./src/basicCommand`)
+const basicCommand = require(`../src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
     console.log(`profiles中無 ${process.argv[2]} 資料`)

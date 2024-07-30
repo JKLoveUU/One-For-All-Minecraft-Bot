@@ -4,8 +4,8 @@ const { fork } = require('child_process');
 const fs = require('fs');
 const sd = require('silly-datetime');
 // mc 不知道為甚麼不require打包就會漏掉了
-const rq_general = require(`./generalbot.js`)
-const rq_raid = require(`./raidbot.js`)
+// const rq_general = require(`./bots/generalbot.js`)
+// const rq_raid = require(`./bots/raidbot.js`)
 //const rqgeneral = fork(path.join(__dirname, 'generalbot.js'));
 //const mineflayer = require("mineflayer");
 //require(`${process.cwd()}/generalbot.js`)
@@ -595,10 +595,10 @@ function createBot(name) {
     }
     switch (bot.crtType) {
         case 'general':
-            botFile = 'generalbot.js';
+            botFile = './bots/generalbot.js';
             break;
         case 'raid':
-            botFile = 'raidbot.js';
+            botFile = './bots/raidbot.js';
             break;
         default:
             console.log(`Invaild crtType: ${bot.crtType}\nunable to create... ${name}`)
