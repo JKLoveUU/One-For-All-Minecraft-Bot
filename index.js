@@ -491,9 +491,10 @@ function main() {
 }
 async function handleClose() {
     logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
-    for (i in bots.name) {
-        if (bots.bots[i].childProcess == undefined) continue
-        bots.bots[i].childProcess.send({ type: "exit" });
+    for (const bot of bots.bots) {
+        if (bot.childProcess) {
+            bot.childProcess.send({ type: "exit" });
+        }
     }
     await Promise.all([
         setBotMenuNotInService(),
@@ -507,31 +508,24 @@ function initBot(name) {
     bots.setBot(name, undefined);
     const profiles = loadProfiles();
     if (!profiles[name]) {
-        bots.setBotStatus(name, 1000)
-        logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`)
-        return
+        bots.setBotStatus(name, 1000);
+        logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
+        return;
     }
     if (!profiles[name].type) {
         bots.setBotStatus(name, 1001)
         return
     }
-    let debug = profiles[name].debug ? true : false;
-    let chat = profiles[name].chat ? true : false;
-    switch (profiles[name].type) {
+    const { type, debug, chat } = profiles[name];
+    switch (type) {
         case 'general':
-            bots.setBot(name, undefined, 'general', 'general', debug,chat);
-            break;
         case 'raid':
-            bots.setBot(name, undefined, 'raid', 'raid', debug,chat);
-            break;
         case 'auto':
-            bots.setBot(name, undefined, 'auto', 'general', debug,chat);
-            break;
         case 'material':
-            bots.setBot(name, undefined, 'material', 'general', debug,chat);
-            break
+            bots.setBot(name, undefined, type, type, !!debug, !!chat);
+            break;
         default:
-            console.log(`Unknown bot type ${profiles[name].type} of ${name}`)
+            console.log(`Unknown bot type ${type} of ${name}`);
             break;
     }
 }
@@ -541,10 +535,10 @@ function initBot(name) {
  * @returns 
  */
 function createBot(name) {
-    let bot = bots.getBot(name)
+    let bot = bots.getBot(name);
     let botFile;
     if (bot === -1) {
-        console.log(`bot ${name} not init...`)
+        console.log(`bot ${name} not init...`);
         return;
     }
     switch (bot.crtType) {
@@ -555,64 +549,56 @@ function createBot(name) {
             botFile = './bots/raidbot.js';
             break;
         default:
-            console.log(`Invaild crtType: ${bot.crtType}\nunable to create... ${name}`)
-            return
+            console.log(`Invalid crtType: ${bot.crtType}\nunable to create... ${name}`);
+            return;
             break;
     }
-    let args = [name, bot.type]
-    if (bot.debug) args.push("--debug")
-    if (bot.chat) args.push("--chat")
+    let args = [name, bot.type];
+    if (bot.debug) args.push("--debug");
+    if (bot.chat) args.push("--chat");
     const child = fork(path.join(__dirname, botFile), args);
     bots.setBot(name, child);
-    child.on('error', e => {
-        console.log(`Error from ${name}:\n${e}`)
-    })
-    child.send({ type: 'init', config: config })
+    child.on('error', error => {
+        console.log(`Error from ${name}:\n${error}`);
+    });
+    child.send({ type: 'init', config: config });
     child.on('close', childProcess => {
-        logToFileAndConsole('WARN', name,`Exit code: ${exitcode[childProcess]} (${childProcess})`)
-        child.removeAllListeners()
-        bots.setBot(name, undefined)
-        if (childProcess == 0) console.log(`${name}: stopped success`)
+        logToFileAndConsole('WARN', name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
+        child.removeAllListeners();
+        bots.setBot(name, undefined);
+        if (childProcess == 0) console.log(`${name}: stopped success`);
         else if (childProcess >= 2000) {
-            logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`)
+            logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`);
         } else if(childProcess == 202){
-            logToFileAndConsole("ERROR", name, `設定檔案錯誤 已停止重啟`)
-            console.log("請使用 .create <botname> 再次開啟bot")
+            logToFileAndConsole("ERROR", name, `設定檔案錯誤 已停止重啟`);
+            console.log("請使用 .create <botname> 再次開啟bot");
         }else {
-            logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`)
-            // bots.setBot(name, setTimeout(() => { createGeneralBot(name) }, 10_000))
-            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD))
+            logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`);
+            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
         }
-    })
-    child.on('message', m => {
-        switch (m.type) {
+    });
+    child.on('message', message => {
+        switch (message.type) {
             case 'logToFile':
-                if (bot.crtType == 'raid') logToFileAndConsole(m.value.type, name.substring(0, 4), m.value.msg)
-                else logToFileAndConsole(m.value.type, name, m.value.msg)
-                break
+                if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, name.substring(0, 4), message.value.msg);
+                else logToFileAndConsole(message.value.type, name, message.value.msg);
+                break;
             case 'setReloadCD':
-                bots.setBotReloadCD(name, m.value)
-                break
+                bots.setBotReloadCD(name, message.value);
+                break;
             case 'setStatus':
-                //console.log('setStatus')
-                //console.log(m)
-                bots.setBotStatus(name, m.value)
-                break
+                bots.setBotStatus(name, message.value);
+                break;
             case 'setCrtType':
-                //console.log('setStatus')
-                //console.log(m)
-                bots.setBotCrtType(name, m.value)
-                break
+                bots.setBotCrtType(name, message.value);
+                break;
             case 'dataToParent':
-                //console.log('setStatus')
-                // console.log(m.value)
-                bots.handle.emit('data', m.value, name)
-                break
+                bots.handle.emit('data', message.value, name);
+                break;
             default:
-                console.log(`Unknown message type ${m.type} from ${name}`)
+                console.log(`Unknown message type ${message.type} from ${name}`);
         }
-    })
-
+    });
 }
 async function getChannelMsgFetch(channel, id) {
     let oldmenu;
