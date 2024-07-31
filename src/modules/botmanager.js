@@ -106,11 +106,11 @@ class BotManager {
 
   loadProfiles() {
     const profilesPath = path.join(process.cwd(), "profiles.json");
-    logToFileAndConsole("INFO", "CONSOLE", `讀取帳號設定檔: ${profilesPath}`);
+    logToFileAndConsole("INFO", "BOTMANAGER", `Reading profile settings from path: ${profilesPath}`);
     try {
       return require(profilesPath);
     } catch (err) {
-      console.error(`帳號設定檔讀取失敗\nFilePath: ${profilesPath}`);
+      console.error(`Fail to read profile settings\nFilePath: ${profilesPath}`);
       console.error("Please Check The Json Format");
       console.error(`Error Msg: \x1b[31m${err.message}\x1b[0m`);
       console.error("You can visit following websites to fix:");
@@ -128,7 +128,7 @@ class BotManager {
 
   registerBotChildProcessEvent(bot, child) {
     child.on("error", (error) => {
-      logToFileAndConsole("ERROR", "CONSOLE", `${bot.name} error: ${error}`);
+      logToFileAndConsole("ERROR", "BOTMANAGER", `${bot.name} error: ${error}`);
     });
     child.on("exit", (childProcess) => {
       child.removeAllListeners();
@@ -137,19 +137,19 @@ class BotManager {
       if (childProcess == 0) {
         logToFileAndConsole(
           "INFO",
-          "CONSOLE",
+          "BOTMANAGER",
           `${bot.name} closed successfully`
         );
       } else if (childProcess >= 2000) {
         logToFileAndConsole(
           "ERROR",
-          "CONSOLE",
+          "BOTMANAGER",
           `${bot.name} closed with err code: ${childProcess}`
         );
       } else {
         logToFileAndConsole(
           "INFO",
-          "CONSOLE",
+          "BOTMANAGER",
           `${bot.name} restart in ${bot.reloadCD / 1000} second`
         );
         setTimeout(
@@ -232,7 +232,7 @@ class BotManager {
       case "raid":
         return `${process.cwd()}/bots/raidbot.js`;
       default:
-        logToFileAndConsole("ERROR", "CONSOLE", `Invalid crtType: ${crtType}`);
+        logToFileAndConsole("ERROR", "BOTMANAGER", `Invalid crtType: ${crtType}`);
         exit(1000);
         return;
     }

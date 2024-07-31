@@ -13,6 +13,14 @@ function DiscordBotStart(botManagerIns) {
     addDiscordBotEventHandler();
 }
 
+async function DiscordBotStop(waitingTime){
+    await Promise.all([
+        setBotMenuNotInService(),
+        new Promise((resolve) => setTimeout(resolve, waitingTime)),
+    ]);
+    client.destroy()
+}
+
 function login(){
     try{
         client.login(config.discord_setting.token)
@@ -23,7 +31,7 @@ function login(){
 
 function addDiscordBotEventHandler(){
     client.on('ready', async () => {
-        logToFileAndConsole("INFO", "CONSOLE", `Discord bot Logged in as ${client.user.tag}`);
+        logToFileAndConsole("INFO", "DISCORD", `Discord bot Logged in as ${client.user.tag}`);
         client.user.setPresence({
             activities: [{
                 name: 'Minecraft',
@@ -56,7 +64,7 @@ function addDiscordBotEventHandler(){
             }
         });
         channel.bulkDelete(botMenuIds)
-            .then(deletedMessages => logToFileAndConsole("INFO", "CONSOLE", `Deleted ${deletedMessages.size} expired Menu`))
+            .then(deletedMessages => logToFileAndConsole("INFO", "DISCORD", `Deleted ${deletedMessages.size} expired Menu`))
             .catch(console.error);
         let newbotMenuId = await channel.send(generateBotMenu());
         botMenuId = newbotMenuId.id
@@ -468,4 +476,4 @@ async function notImplemented(interaction) {
     })
 }
 
-module.exports = { DiscordBotStart, setBotMenuNotInService }
+module.exports = { DiscordBotStart, setBotMenuNotInService, DiscordBotStop}
