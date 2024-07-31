@@ -12,9 +12,8 @@ const sd = require('silly-datetime');
 // configs
 const toml = require('toml-require').install({ toml: require('toml') });
 const config = require(`${process.cwd()}/config.toml`);
-
+const { logToFileAndConsole } = require("./src/logger");
 const { Vec3 } = require('vec3')
-const EventEmitter = require('events');
 
 // Discord 
 const { SlashCommandBuilder } = require('@discordjs/builders');
@@ -27,10 +26,12 @@ const rest = new REST({ version: '9' }).setToken(config.discord_setting.token);
 const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 let botMenuId = undefined;
 
+// Bot Instace
+const BotManager = require('./src/modules/botmanager.js');
+const botstatus = require('./src/modules/botstatus.js');
 //
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
-//const logsDir = path.join(__dirname, 'logs');
 function checkPaths(){
     if (!fs.existsSync('logs')) {
         fs.mkdirSync('logs');
@@ -39,251 +40,7 @@ function checkPaths(){
         fs.mkdirSync(`config/global`, { recursive: true });
     }
 }
-function loadProfiles() {
-    const profilesPath = path.join(process.cwd(), 'profiles.json');
-    try {
-        return require(profilesPath);
-    } catch (err) {
-        console.error(`帳號設定檔讀取失敗\nFilePath: ${profilesPath}`);
-        console.error("Please Check The Json Format");
-        console.error(`Error Msg: \x1b[31m${err.message}\x1b[0m`);
-        console.error("You can visit following websites to fix:");
-        console.error(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`);
-        console.error(`\x1b[33mhttps://www.google.com/search?q=${encodeURIComponent(err.message)}\x1b[0m`);
-        return null;
-    }
-}
-function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
-    const logFile = fs.createWriteStream('logs/lastest.log', { flags: 'a' });
-    let arg = args.join(' ')
-    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')      //會太長嗎?
-    switch (type) {
-        case "DEBUG":
-            type = "\x1b[32m" + type + "\x1b[0m";
-            break;
-        case "INFO":
-            type = "\x1b[32m" + type + "\x1b[0m";
-            break;
-        case "WARN":
-            type = "\x1b[33m" + type + "\x1b[0m";
-            break;
-        case "ERROR":
-            type = "\x1b[31m" + type + "\x1b[0m";
-            break;
-        case "CHAT":
-            type = "\x1b[93m" + type + "\x1b[0m";
-            break;
-        default:
-            type = type;
-            break;
-    }
-    let clog = `[${fmtTime}][${type}][${p}] ${arg}`;
-    let nclog = clog.replace(/\x1b\[\d+m/g, '');
-    console.log(clog);
-    logFile.write(nclog + "\n");
-}
 
-class BotInstance{
-    constructor(name, childProcess, type, crtType, debug, chat){
-        this.name = name;
-        this.childProcess = childProcess;
-        this.logTime = new Date();
-        this.status = 0;
-        this.type = type;
-        this.crtType = crtType;
-        this.reloadCD = config.setting.reconnect_CD;
-        this.debug = !!debug;
-        this.chat = !!chat;
-    }
-}
-
-class BotManager{
-    constructor(){
-        this.bots = [];
-        this.currentBot = null; // Current selected bot instance
-        this.handle = new EventEmitter();
-    }
-    getBot(name){
-        return this.bots.find(bot => bot.name === name) || null;
-    }
-    getCurrentBot(){
-        return this.currentBot;
-    }
-    setCurrentBot(name){
-        this.currentBot = this.getBot(name);
-    }
-    setBotStatus(name, status){
-        const bot = this.getBot(name);
-        if (bot != null) {
-            bot.status = status;
-        }
-    }
-    setBotReloadCD(name, cd = 10_000){
-        const bot = this.getBot(name);
-        if (bot != null) {
-            bot.reloadCD = cd;
-        }
-    }
-    setBotCrtType(name, crtType){
-        const bot = this.getBot(name);
-        if (bot != null) {
-            bot.crtType = crtType;
-        }
-    }
-    
-    // Singleton
-    getBotInstance(name, child, type = null, crtType = null, debug, chat){
-        if (!this.bots[name]) {
-            this.bots[name] = new BotInstance(name, child, type, crtType, debug, chat);
-        }
-        return this.bots[name];
-    }
-    deleteBotInstanceByName(name){
-        // find the bot instance by name and delete it from the array
-        this.bots = this.bots.filter(bot => bot.name !== name);
-    }
-    
-    registerBotChildProcessEvent(bot, child){
-        child.on('error', error => {
-            console.log(`Error from ${bot.name}:\n${error}`);
-        });
-        child.on('close', childProcess => {
-            logToFileAndConsole('WARN', bot.name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
-            child.removeAllListeners();
-            this.updateBotChildProcess(bot, null);
-            if (childProcess == 0) console.log(`${bot.name}: stopped success`);
-            else if (childProcess >= 2000) {
-                logToFileAndConsole("ERROR", bot.name, `closed with err code: ${childProcess}`);
-            } else {
-                logToFileAndConsole("INFO", bot.name, `restart at ${bot.reloadCD / 1000} second`);
-                setTimeout(() => { this.createBot(bot.name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
-            }
-        });
-        child.on('message', message => {
-            switch (message.type) {
-                case 'logToFile':
-                    if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, bot.name.substring(0, 4), message.value.msg);
-                    else logToFileAndConsole(message.value.type, bot.name, message.value.msg);
-                    break;
-                case 'setReloadCD':
-                    this.setBotReloadCD(bot.name, message.value);
-                    break;
-                case 'setStatus':
-                    this.setBotStatus(bot.name, message.value);
-                    break;
-                case 'setCrtType':
-                    this.setBotCrtType(bot.name, message.value);
-                    break;
-                case 'dataToParent':
-                    botManager.handle.emit('data', message.value, bot.name);
-                    break;
-                default:
-                    console.log(`Unknown message type ${message.type} from ${bot.name}`);
-            }
-        });
-    }
-    updateBotChildProcess(bot, child){
-        if (bot != null) {
-            bot.childProcess = child;
-        }
-    }
-    initBot(name){
-        if (this.bots.some(bot => bot.name === name)) {
-            logToFileAndConsole('ERROR', name, `Bot ${name} 已經存在`);
-            return;
-        }    
-        const profiles = loadProfiles();
-        if (!profiles[name]) {
-            logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
-            process.exit(1000);
-        }
-        if (!profiles[name].type) {
-            logToFileAndConsole('ERROR', name, `profiles中 ${name} 沒有type資料`);
-            process.exit(1001);
-        }
-        const { type, debug, chat } = profiles[name];
-        const bot = this.getBotInstance(name, null, type, type, !!debug, !!chat);
-        switch (type) {
-            case 'general':
-            case 'raid':
-            case 'auto':
-            case 'material':
-                this.bots.push(bot);
-                break;
-            default:
-                console.log(`Unknown bot type ${type} of ${name}`);
-                process.exit(1000);
-                break;
-        }
-        return bot;
-    }
-
-    getBotFilePath(crtType){
-        switch (crtType) {
-            case 'general':
-                return './bots/generalbot.js';
-            case 'raid':
-                return './bots/raidbot.js';
-            default:
-                logToFileAndConsole('ERROR', 'CONSOLE', `Invalid crtType: ${crtType}`);
-                exit(1000);
-                return;
-        }
-    }
-    
-    createBot(name){
-        const bot = this.initBot(name);
-        if (botManager.currentBot == null){
-            botManager.currentBot = bot;
-        }
-        let botFilePath = this.getBotFilePath(bot.crtType);
-        let args = [name, bot.type];
-        if (bot.debug) args.push("--debug");
-        if (bot.chat) args.push("--chat");
-        const child = fork(path.join(__dirname, botFilePath), args);
-        this.updateBotChildProcess(bot, child);
-        this.registerBotChildProcessEvent(bot, child);
-        child.send({ type: 'init', config: config });
-    }
-
-    async getBotInfo(name){
-        const bot = this.getBot(name);
-        if (bot === -1) {
-            return -1;
-        }
-        const data = await this.getBotData(bot.name);
-        const botinfo = {
-            id: bot.name,
-            name: data.name,
-            avatar: `https://mc-heads.net/avatar/${data.name}/64`,
-            server: data.server,
-            coin: data.coin,
-            balance: data.balance,
-            position: data.position,
-            tasks: data.tasks,
-            runingTask: data.runingTask
-        };
-        return botinfo;
-    }
-    async getBotData(name) {
-        const bot = this.getBot(name);
-        if (bot === -1) {
-            return -1;
-        }
-        return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => {
-                reject();
-            }, 100);
-            this.handle.once('data', (data, nm) => {
-                if (name === nm) {
-                    clearTimeout(timer);
-                    resolve(data);
-                }
-            });
-            bot.childProcess.send({ type: 'dataRequire' });
-        });
-    }
-}
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -350,13 +107,16 @@ function addConsoleEventHandler() {
                     break;
                 // Switch to another bot
                 case 'switch':
-                    const botIndex = parseInt(rlargs[0], 10);
-                    if (isNaN(botIndex) || botIndex >= botManager.bots.length || botIndex < 0) {
-                        console.log("Invalid bot index. Usage: .switch <botIndex>");
-                        return;
+                    const botName = rlargs[0];
+                    // Check botName is a string or not
+                    if (typeof botName !== 'string') {
+                        console.log(`Usage: .switch <botName>`);
+                        break;
                     }
-                    process.title = `[Bot][${botIndex} ${selectedBot.name}] Use .switch to select a bot`;
-                    console.log(`Switched to bot [${botIndex} - ${selectedBot.name}].`);
+                    botManager.setCurrentBotByName(botName);
+                    const currentBot = botManager.getCurrentBot();
+                    process.title = `[Bot][${currentBot.name}] Use .switch to select a bot`;
+                    console.log(`Switched to bot [${currentBot.name}].`);
                     break;
                 default:
                     if (selectedBot == null) {
@@ -489,9 +249,9 @@ function addDiscordBotEventHandler(){
         } else if (interaction.isSelectMenu()) {
             const { customId, values } = interaction;
             if (customId === 'botmenu-select') {
-                targetBot = values[0].slice(15)
+                let targetBot = values[0].slice(15)
                 console.log(targetBot)
-                let targetBotIns = botManager.getBot(targetBot)
+                let targetBotIns = botManager.getBotByName(targetBot)
                 if (targetBotIns === -1) {
                     console.log("err at open menu for bot", targetBot)
                     await interaction.reply({
@@ -878,58 +638,7 @@ async function notImplemented(interaction) {
         ephemeral: true
     })
 }
-/**
- * 這裡一定要改 linux 只支持0-255
- */
-const exitcode = {
-    0: 'success',
-    1: 'general error',
-    2: 'misuse of shell builtins',
-    1000: 'unknown error',
-    1001: 'server reload',
-    1002: 'client reload',
-    1402: 'raid (keepalive)',
-    1003: 'proxy server restarting',
-    1004: 'client error reload',
-    1900: 'RateLimiter disallowed request',
-    1901: 'Failed to obtain profile data',
-    1902: 'FetchError: read ECONNRESET(Mojang)',
-    1903: 'FetchError: read ECONNRESET',
-    //  不可重啟類
-    2001: 'config not found',
-    2002: 'config err',
-    202: 'config err',
-};
-const botstatus = {
-    Close:{
-        code: 0,
-        description: "Closed",
-    },
-    //  通用區
-    0: 'Closed',    //正常關閉
-    1: 'free',
-    2: 'in tasking',
-    3: 'raid',
-    4: 'wait Reload CoolDown',
-    100: 'proxy server restarting',
-    1000: 'Closed(Profile Not Found)',
-    1001: 'Closed(Type Not Found)',
-    //  Raid 區
-    2000: 'raid - closed', //unused
-    2001: 'Restarting',
-    2200: 'Running',
-    2201: 'Running(Raid)',
-    2401: 'Closed(RaidFarm Not Found)',
-    //  General 區
-    3000: 'general - closed',   //unused
 
-    3001: 'Logging in',
-    3002: 'Restarting',
-    3200: 'Running',
-    3201: 'Running(Idle)',
-    3202: 'Running(Tasking)',
 
-    //    process.send({ type: 'setStatus', value: 1000 })
-};
 
 main();
