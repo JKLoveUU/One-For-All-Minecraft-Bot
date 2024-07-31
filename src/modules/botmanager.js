@@ -44,7 +44,10 @@ class BotManager {
   }
   printBotList() {
     const typeLength = 7;
-    const crtTypeLength = 7; 
+    const crtTypeLength = 7;
+
+    console.log(`Total ${this.getBotNums()} bots`);
+    console.log(`Id | Bot | Status | Type | CrtType`);
     this.bots.forEach((bot, i) => {
       console.log(
         `${i} | ${bot.name} | ${botstatus[bot.status]} | ${
@@ -93,11 +96,11 @@ class BotManager {
     }
   }
 
-  stop(){
+  stop() {
     for (const bot of this.bots) {
-        if (bot.childProcess) {
-            bot.childProcess.send({ type: "exit" });
-        }
+      if (bot.childProcess) {
+        bot.childProcess.send({ type: "exit" });
+      }
     }
   }
 
