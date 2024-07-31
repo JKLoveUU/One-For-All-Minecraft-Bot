@@ -3,36 +3,26 @@ const sd = require('silly-datetime');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
-const logFilePath = path.join(projectRoot, 'logs', 'lastest.log');
+const logFilePath = path.join(projectRoot, 'logs', 'latest.log');
 const logFile = fs.createWriteStream(logFilePath, { flags: 'a' });
 
+const logTypes = {
+    DEBUG: "\x1b[32mDEBUG\x1b[0m",
+    INFO: "\x1b[32mINFO\x1b[0m",
+    WARN: "\x1b[33mWARN\x1b[0m",
+    ERROR: "\x1b[31mERROR\x1b[0m",
+    CHAT: "\x1b[93mCHAT\x1b[0m"
+};
+
 function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
-    let arg = args.join(' ')
-    let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')      //會太長嗎?
-    switch (type) {
-        case "DEBUG":
-            type = "\x1b[32m" + type + "\x1b[0m";
-            break;
-        case "INFO":
-            type = "\x1b[32m" + type + "\x1b[0m";
-            break;
-        case "WARN":
-            type = "\x1b[33m" + type + "\x1b[0m";
-            break;
-        case "ERROR":
-            type = "\x1b[31m" + type + "\x1b[0m";
-            break;
-        case "CHAT":
-            type = "\x1b[93m" + type + "\x1b[0m";
-            break;
-        default:
-            type = type;
-            break;
-    }
-    let clog = `[${fmtTime}][${type}][${p}] ${arg}`;
-    let nclog = clog.replace(/\x1b\[\d+m/g, '');
-    console.log(clog);
-    logFile.write(nclog + "\n");
+    const arg = args.join(' ');
+    const fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss');
+    const logType = logTypes[type] || type;
+    const logMessage = `[${fmtTime}][${logType}][${p}] ${arg}`;
+    const plainLogMessage = logMessage.replace(/\x1b\[\d+m/g, '');
+
+    console.log(logMessage);
+    logFile.write(plainLogMessage + "\n");
 }
 
 module.exports = { logToFileAndConsole };
