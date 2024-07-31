@@ -138,6 +138,10 @@ class BotManager{
         }
         return this.bots[name];
     }
+    deleteBotInstanceByName(name){
+        // find the bot instance by name and delete it from the array
+        this.bots = this.bots.filter(bot => bot.name !== name);
+    }
     
     registerBotChildProcessEvent(bot, child){
         child.on('error', error => {
@@ -281,7 +285,6 @@ class BotManager{
     }
 }
 
-let currentSelect = 0;
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -327,6 +330,7 @@ function addConsoleEventHandler() {
                     if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
+                        botManager.deleteBotInstanceByName(selectedBot.name);
                         selectedBot.childProcess.send({ type: "exit" });
                         process.title = '[Bot][-1] type .switch to select a bot';
                     }
@@ -336,6 +340,7 @@ function addConsoleEventHandler() {
                     if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
+                        botManager.deleteBotInstanceByName(selectedBot.name);
                         selectedBot.childProcess.send({ type: "reload" });
                     }
                     break;
@@ -350,7 +355,6 @@ function addConsoleEventHandler() {
                         console.log("Invalid bot index. Usage: .switch <botIndex>");
                         return;
                     }
-                    const selectedBot = botManager.getCurrentBot();
                     process.title = `[Bot][${botIndex} ${selectedBot.name}] Use .switch to select a bot`;
                     console.log(`Switched to bot [${botIndex} - ${selectedBot.name}].`);
                     break;
