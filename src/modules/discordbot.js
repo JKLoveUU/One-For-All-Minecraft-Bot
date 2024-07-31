@@ -6,7 +6,7 @@ const config = require(`${process.cwd()}/config.toml`);
 const botstatus = require("./botstatus");
 let botMenuId = undefined;
 let botManager;
-const { logToFileAndConsole } = require("../logger");
+const { logger } = require("../logger");
 function DiscordBotStart(botManagerIns) {
     botManager = botManagerIns;
     login();
@@ -25,13 +25,13 @@ function login(){
     try{
         client.login(config.discord_setting.token)
     }catch(err){
-        logToFileAndConsole("ERROR", "DISCORD", `Discord Bot Login 失敗\n${err.message}`)
+        logger(true, "ERROR", "DISCORD", `Discord Bot Login 失敗\n${err.message}`)
     }
 }
 
 function addDiscordBotEventHandler(){
     client.on('ready', async () => {
-        logToFileAndConsole("INFO", "DISCORD", `Discord bot Logged in as ${client.user.tag}`);
+        logger(true, "INFO", "DISCORD", `Discord bot Logged in as ${client.user.tag}`);
         client.user.setPresence({
             activities: [{
                 name: 'Minecraft',
@@ -64,7 +64,7 @@ function addDiscordBotEventHandler(){
             }
         });
         channel.bulkDelete(botMenuIds)
-            .then(deletedMessages => logToFileAndConsole("INFO", "DISCORD", `Deleted ${deletedMessages.size} expired Menu`))
+            .then(deletedMessages => logger(true, "INFO", "DISCORD", `Deleted ${deletedMessages.size} expired Menu`))
             .catch(console.error);
         let newbotMenuId = await channel.send(generateBotMenu());
         botMenuId = newbotMenuId.id
@@ -209,7 +209,7 @@ async function getChannelMsgFetch(channel, id) {
         oldmenu = await channel.messages.fetch(id, { force: true });
         return oldmenu;
     } catch (error) {
-        logToFileAndConsole("ERROR", "DISCORD", `getChannelMsgFetch: ${error}`)
+        logger(true, "ERROR", "DISCORD", `getChannelMsgFetch: ${error}`)
         return undefined;
     }
 }

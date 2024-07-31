@@ -2,7 +2,7 @@ const readline = require("readline");
 const fs = require("fs");
 const toml = require("toml-require").install({ toml: require("toml") });
 const config = require(`${process.cwd()}/config.toml`);
-const { logToFileAndConsole } = require("./src/logger");
+const { logger } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
 const {
   DiscordBotStart,
@@ -87,7 +87,8 @@ function handleCommand(input) {
         // 不確定怎麼送 "reload" 給 child process 卻又能夠將新的 child process 綁到 botInstance 上面
         // 所以目前先用 "exit" 代替
         selectedBot.childProcess.send({ type: "exit" });
-        logToFileAndConsole(
+        logger(
+          true,
           "INFO",
           "CONSOLE",
           `Reloading ${selectedBot.name} in ${selectedBot.reloadCD} ms`
@@ -99,7 +100,7 @@ function handleCommand(input) {
       }
       break;
     case "test":
-      logToFileAndConsole("INFO", "CONSOLE", args);
+      logger(true, "INFO", "CONSOLE", args);
       break;
     case "switch":
       const botName = args[0];
@@ -119,7 +120,7 @@ function handleCommand(input) {
       }
       break;
   }
-//   rl.prompt();
+  //   rl.prompt();
 }
 
 function addConsoleEventHandler() {
@@ -131,7 +132,7 @@ function addConsoleEventHandler() {
 
 function addMainProcessEventHandler() {
   process.on("uncaughtException", (err) => {
-    logToFileAndConsole("ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
+    logger(true, "ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
     console.log("PID:", process.pid);
   });
   process.on("SIGINT", handleClose);
@@ -139,17 +140,18 @@ function addMainProcessEventHandler() {
 }
 
 async function handleClose() {
-  logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
+  logger(true, "INFO", "CONSOLE", "Closing application...");
   botManager.stop();
   const waitingTime = 1000 + botManager.getBotNums() * 200;
   await DiscordBotStop(waitingTime);
-  logToFileAndConsole("INFO", "CONSOLE", "Close finished");
+  logger(true, "INFO", "CONSOLE", "Close finished");
   process.exit(0);
 }
 
 function main() {
   checkPaths();
-  logToFileAndConsole(
+  logger(
+    true,
     "INFO",
     "CONSOLE",
     `Program starting. Press Ctrl+C to exit   PID: ${process.pid}`
@@ -165,7 +167,7 @@ function main() {
       timerdelay += 200;
     }, timerdelay);
   });
-//   rl.prompt();
+  //   rl.prompt();
 }
 
 main();

@@ -1,6 +1,6 @@
 const BotInstance = require("./botinstance");
 const EventEmitter = require("events");
-const { logToFileAndConsole } = require("../logger");
+const { logger } = require("../logger");
 const { fork } = require("child_process");
 const path = require("path");
 const config = require(`${process.cwd()}/config.toml`);
@@ -106,7 +106,8 @@ class BotManager {
 
   loadProfiles() {
     const profilesPath = path.join(process.cwd(), "profiles.json");
-    logToFileAndConsole(
+    logger(
+      true,
       "INFO",
       "BOTMANAGER",
       `Reading profile settings from path: ${profilesPath}`
@@ -132,26 +133,24 @@ class BotManager {
 
   registerBotChildProcessEvent(bot, child) {
     child.on("error", (error) => {
-      logToFileAndConsole("ERROR", "BOTMANAGER", `${bot.name} error: ${error}`);
+      logger(true, "ERROR", "BOTMANAGER", `${bot.name} error: ${error}`);
     });
     child.on("exit", (childProcess) => {
       child.removeAllListeners();
       this.setBotChildProcess(bot, null);
       this.deleteBotInstance(bot);
       if (childProcess == 0) {
-        logToFileAndConsole(
-          "INFO",
-          "BOTMANAGER",
-          `${bot.name} closed successfully`
-        );
+        logger(true, "INFO", "BOTMANAGER", `${bot.name} closed successfully`);
       } else if (childProcess >= 2000) {
-        logToFileAndConsole(
+        logger(
+          true,
           "ERROR",
           "BOTMANAGER",
           `${bot.name} closed with err code: ${childProcess}`
         );
       } else {
-        logToFileAndConsole(
+        logger(
+          true,
           "INFO",
           "BOTMANAGER",
           `${bot.name} restart in ${bot.reloadCD / 1000} second`
@@ -168,17 +167,13 @@ class BotManager {
       switch (message.type) {
         case "logToFile":
           if (bot.crtType == "raid")
-            logToFileAndConsole(
+            logger(
+              true,
               message.value.type,
               bot.name.substring(0, 4),
               message.value.msg
             );
-          else
-            logToFileAndConsole(
-              message.value.type,
-              bot.name,
-              message.value.msg
-            );
+          else logger(true, message.value.type, bot.name, message.value.msg);
           break;
         case "setReloadCD":
           this.setBotReloadCD(bot, message.value);
@@ -200,31 +195,31 @@ class BotManager {
 
   initBot(name) {
     if (this.bots.some((bot) => bot.name === name)) {
-      logToFileAndConsole("ERROR", "BOTMANAGER", `Bot: ${name} 已經存在`);
+      logger(true, "ERROR", "BOTMANAGER", `Bot: ${name} 已經存在`);
       return;
     }
-  
+
     const profiles = this.loadProfiles();
     const profile = profiles[name];
-  
+
     if (!profile) {
-      logToFileAndConsole("ERROR", "BOTMANAGER", `profiles.js 中無 ${name} 資料`);
+      logger(true, "ERROR", "BOTMANAGER", `profiles.js 中無 ${name} 資料`);
       return;
     }
-  
+
     const { type, debug, chat } = profile;
-  
+
     if (!type) {
-      logToFileAndConsole("ERROR", "BOTMANAGER", `profiles.js 中 ${name} 沒有type資料`);
+      logger(true, "ERROR", "BOTMANAGER", `profiles.js 中 ${name} 沒有type資料`);
       return;
     }
-  
+
     const validTypes = ["general", "raid", "auto", "material"];
     if (!validTypes.includes(type)) {
       console.log(`Unknown bot type ${type} of ${name}`);
       return null;
     }
-  
+
     const bot = this.getBotInstance(name, null, type, type, !!debug, !!chat);
     this.bots.push(bot);
     return bot;
@@ -237,11 +232,7 @@ class BotManager {
       case "raid":
         return `${process.cwd()}/bots/raidbot.js`;
       default:
-        logToFileAndConsole(
-          "ERROR",
-          "BOTMANAGER",
-          `Invalid crtType: ${crtType}`
-        );
+        logger(true, "ERROR", "BOTMANAGER", `Invalid crtType: ${crtType}`);
         exit(1000);
         return;
     }
@@ -249,7 +240,7 @@ class BotManager {
 
   createBot(name) {
     const bot = this.initBot(name);
-    if(bot == null) return;
+    if (bot == null) return;
     if (this.currentBot == null) {
       this.currentBot = bot;
     }

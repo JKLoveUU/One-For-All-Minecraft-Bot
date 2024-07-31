@@ -125,7 +125,7 @@ const craftAndExchange = {
         bot_id = user_id;
         mcData = require('minecraft-data')(bot.version)
         if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/craftAndExchange.json`)) {
-            logger(true, 'INFO', `Creating config - craftAndExchange.json`)
+            logger(true, 'INFO', process.argv[2], `Creating config - craftAndExchange.json`)
             save(craftAndExchange_cfg)
         } else {
             craftAndExchange_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/craftAndExchange.json`)
@@ -273,7 +273,7 @@ async function exchange(task) {
         bot.chat(`/m ${task.minecraftUser} 兌換id錯誤 ${exchangeIndex}`);
         return;
     }
-    bot.logger(true, 'INFO', `兌換目標 ${shopName} ${exchangeIndex}`)
+    bot.logger(true, 'INFO', process.argv[2], `兌換目標 ${shopName} ${exchangeIndex}`)
     let input_weight, output_weight, shop_item_window;
     let openShop_item_timeout = false;
     let inputsIds = [];
@@ -318,13 +318,13 @@ async function exchange(task) {
         }
     })
     if (openShop_item_timeout) {
-        bot.logger(true, 'ERROR', `無法檢測兌換商店 已中止`)
+        bot.logger(true, 'ERROR', process.argv[2], `無法檢測兌換商店 已中止`)
         return;
     }
     await sleep(500)  //下面那行常常null錯
     let itemWeight = shop_item_window.slots[exchangeIndex]?.nbt?.value?.display?.value?.Name?.value?.match(/x\d{1,4}/g); 
     if(!itemWeight){
-        bot.logger(true, 'ERROR', `無法讀取 兌換權重`)
+        bot.logger(true, 'ERROR', process.argv[2], `無法讀取 兌換權重`)
         return
     } 
     input_weight = parseInt(itemWeight.shift().slice(1))
@@ -357,7 +357,7 @@ async function exchange(task) {
                     try {
                         let boxposblock = bot.blockAt(new Vec3(cfg_exchange_cache["output_" + (i + 1)][0][0], cfg_exchange_cache["output_" + (i + 1)][0][1], cfg_exchange_cache["output_" + (i + 1)][0][2]))
                         if (boxposblock == null) {
-                            bot.logger(true, 'INFO', `距離過遠 已終止 兌換/合成`)
+                            bot.logger(true, 'INFO', process.argv[2], `距離過遠 已終止 兌換/合成`)
                             if(task.source=="minecraft-dm") bot.chat(`/m ${task.minecraftUser} 距離過遠 已終止 兌換/合成`);
                             await sleep(500)
                             return;
@@ -515,7 +515,7 @@ async function exchange(task) {
         //console.log('完整結束一次')
         //break;
     }
-    bot.logger(true, 'INFO', `兌換結束`)
+    bot.logger(true, 'INFO', process.argv[2], `兌換結束`)
     if(task.source=="minecraft-dm") bot.chat(`/m ${task.minecraftUser} 兌換結束`);
 }
 

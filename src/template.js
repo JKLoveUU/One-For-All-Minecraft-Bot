@@ -51,14 +51,14 @@ const template = {
         mcData = require('minecraft-data')(bot.version)
         //mapart.json
         if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart.json`)) {
-            logger(true, 'INFO', `Creating config - mapart.json`)
+            logger(true, 'INFO', process.argv[2], `Creating config - mapart.json`)
             save(mapart_cfg)
         } else {
             mapart_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`)
         }
         //mapart.json (global)
         if (!fs.existsSync(`${process.cwd()}/config/global/mapart.json`)) {
-            logger(true, 'INFO', `Creating global config - mapart.json`)
+            logger(true, 'INFO', process.argv[2], `Creating global config - mapart.json`)
             await fsp.writeFile(`${process.cwd()}/config/global/mapart.json`, JSON.stringify(mapart_global_cfg, null, '\t'), function (err, result) {
                 if (err) console.log('mapart save error', err);
             });

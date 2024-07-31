@@ -341,7 +341,7 @@ async function cmd_payall(task) {
     switch (task.source) {
         case 'minecraft-dm':
             bot.chat(`/pay ${task.minecraftUser} ${bot.botinfo.balance}`);
-            logger(true, "INFO", `${task.minecraftUser} withdraw ${bot.botinfo.balance}`)
+            logger(true, "INFO", process.argv[2], `${task.minecraftUser} withdraw ${bot.botinfo.balance}`)
             break;
         default:
             console.log("限定使用私訊")
@@ -377,7 +377,7 @@ async function cmd_info(task) {
                 displaySlot(inv.slots[i])
             }
             //binfo+=(`\x1b[96m[\x1b[0m---------------\x1b[96m]\x1b[0m`)
-            logger(false, "INFO", `BOT信息如下\n${binfo.slice(0, -1)}`)
+            logger(false, "INFO", process.argv[2], `BOT信息如下\n${binfo.slice(0, -1)}`)
             break;
         case 'discord':
             console.log(`Discord Reply not implemented`);
@@ -410,7 +410,7 @@ async function cmd_balinfo(task) {
             bot.chat(`/m ${task.minecraftUser} &b綠&r: &6${bot.botinfo.balance}&r, &b村&r: &6${bot.botinfo.coin}`);
             break;
         case 'console':
-            logger(false, "INFO", `\x1b[96m綠 \x1b[37m${bot.botinfo.balance} \x1b[96m村 \x1b[37m${bot.botinfo.coin}\x1b[0m`)
+            logger(false, "INFO", process.argv[2], `\x1b[96m綠 \x1b[37m${bot.botinfo.balance} \x1b[96m村 \x1b[37m${bot.botinfo.coin}\x1b[0m`)
             break;
         case 'discord':
             console.log(`Discord Reply not implemented`);
@@ -430,7 +430,7 @@ async function cmd_expinfo(task) {
             bot.chat(`/m ${task.minecraftUser} &b等級&r: &6${expLevel}&r, &b總經驗值&r: &6${expPoint}&r, &b當前進度&r: &6${expProgress}%`);
             break;
         case 'console':
-            logger(false, "INFO", `\x1b[96mLevel \x1b[37m${expLevel} \x1b[96mPoint \x1b[37m${expPoint} \x1b[96mProgress \x1b[37m${expProgress}%\x1b[0m`)
+            logger(false, "INFO", process.argv[2], `\x1b[96mLevel \x1b[37m${expLevel} \x1b[96mPoint \x1b[37m${expPoint} \x1b[96mProgress \x1b[37m${expProgress}%\x1b[0m`)
             break;
         case 'discord':
             console.log(`Discord Reply not implemented`);
@@ -466,7 +466,7 @@ async function throw_slot(slot) {
         bot.closeWindow(bot.currentWindow)
     }
     if (bot.inventory.slots[slot] != null) {
-        logger(true, 'INFO', `丟棄 slot: ${slot} - ${bot.inventory.slots[slot].name} x${bot.inventory.slots[slot].count}`)
+        logger(true, 'INFO', process.argv[2], `丟棄 slot: ${slot} - ${bot.inventory.slots[slot].name} x${bot.inventory.slots[slot].count}`)
         bot.tossStack(bot.inventory.slots[slot])
         await sleep(50);
     }
@@ -477,8 +477,8 @@ async function cmd_exit(task) {
 }
 async function cmd_say(task) {
     let text = task.content.slice(1).join(' ')
-    if (task.source == 'minecraft-dm') logger(true, 'INFO', `轉發 ${task.minecraftUser} 消息: ${text}`)
-    else if (task.source == 'console') logger(true, 'INFO', `轉發消息: ${text}`)
+    if (task.source == 'minecraft-dm') logger(true, 'INFO', process.argv[2], `轉發 ${task.minecraftUser} 消息: ${text}`)
+    else if (task.source == 'console') logger(true, 'INFO', process.argv[2], `轉發消息: ${text}`)
     bot.chat(text)
     //console.log(text)
 }
