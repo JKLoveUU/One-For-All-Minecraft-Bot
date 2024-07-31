@@ -21,6 +21,8 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const { Client, Intents, MessageActionRow, MessageButton, MessageOptions, MessagePayload, MessageSelectMenu, MessageEmbed, Message } = require('discord.js');
+const { log } = require('console');
+const { exit } = require('process');
 const rest = new REST({ version: '9' }).setToken(config.discord_setting.token);
 const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
 let botMenuId = undefined;
@@ -138,14 +140,55 @@ class BotManager{
         }
         return this.bots[name];
     }
-    updateBotChildProcess(name, child){
-        const bot = this.getBot(name);
-        if (bot !== -1) {
+    registerBotChildProcessEvent(bot, child){
+        child.on('error', error => {
+            console.log(`Error from ${bot.name}:\n${error}`);
+        });
+        child.on('close', childProcess => {
+            logToFileAndConsole('WARN', bot.name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
+            child.removeAllListeners();
+            this.updateBotChildProcess(bot.name, null);
+            if (childProcess == 0) console.log(`${bot.name}: stopped success`);
+            else if (childProcess >= 2000) {
+                logToFileAndConsole("ERROR", bot.name, `closed with err code: ${childProcess}`);
+            } else {
+                logToFileAndConsole("INFO", bot.name, `restart at ${bot.reloadCD / 1000} second`);
+                setTimeout(() => { this.createBot(bot.name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
+            }
+        });
+        child.on('message', message => {
+            switch (message.type) {
+                case 'logToFile':
+                    if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, bot.name.substring(0, 4), message.value.msg);
+                    else logToFileAndConsole(message.value.type, bot.name, message.value.msg);
+                    break;
+                case 'setReloadCD':
+                    this.setBotReloadCD(bot.name, message.value);
+                    break;
+                case 'setStatus':
+                    this.setBotStatus(bot.name, message.value);
+                    break;
+                case 'setCrtType':
+                    this.setBotCrtType(bot.name, message.value);
+                    break;
+                case 'dataToParent':
+                    botManager.handle.emit('data', message.value, bot.name);
+                    break;
+                default:
+                    console.log(`Unknown message type ${message.type} from ${bot.name}`);
+            }
+        });
+    }
+    updateBotChildProcess(bot, child){
+        if (bot != null) {
             bot.childProcess = child;
-            bot.logTime = new Date();
         }
     }
     initBot(name){
+        if (this.bots.some(bot => bot.name === name)) {
+            logToFileAndConsole('ERROR', name, `Bot ${name} 已經存在`);
+            return;
+        }    
         const profiles = loadProfiles();
         if (!profiles[name]) {
             logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
@@ -156,81 +199,45 @@ class BotManager{
             process.exit(1001);
         }
         const { type, debug, chat } = profiles[name];
+        const bot = this.getBotInstance(name, null, type, type, !!debug, !!chat);
         switch (type) {
             case 'general':
             case 'raid':
             case 'auto':
             case 'material':
-                this.bots.push(this.getBotInstance(name, undefined, type, type, !!debug, !!chat));
+                this.bots.push(bot);
                 break;
             default:
                 console.log(`Unknown bot type ${type} of ${name}`);
+                process.exit(1000);
                 break;
         }
+        return bot;
     }
 
-    createBot(name){
-        const bot = this.getBot(name);
-        if (bot === -1) {
-            console.log(`bot ${name} not init...`);
-            return;
-        }
-        let botFile;
-        switch (bot.crtType) {
+    getBotFilePath(crtType){
+        switch (crtType) {
             case 'general':
-                botFile = './bots/generalbot.js';
-                break;
+                return './bots/generalbot.js';
             case 'raid':
-                botFile = './bots/raidbot.js';
-                break;
+                return './bots/raidbot.js';
             default:
-                console.log(`Invalid crtType: ${bot.crtType}\nunable to create... ${name}`);
+                logToFileAndConsole('ERROR', 'CONSOLE', `Invalid crtType: ${crtType}`);
+                exit(1000);
                 return;
-                break;
         }
+    }
+    
+    createBot(name){
+        const bot = this.initBot(name);
+        let botFilePath = this.getBotFilePath(bot.crtType);
         let args = [name, bot.type];
         if (bot.debug) args.push("--debug");
         if (bot.chat) args.push("--chat");
-        const child = fork(path.join(__dirname, botFile), args);
-        this.updateBotChildProcess(name, child);
-        child.on('error', error => {
-            console.log(`Error from ${name}:\n${error}`);
-        });
+        const child = fork(path.join(__dirname, botFilePath), args);
+        this.updateBotChildProcess(bot, child);
+        this.registerBotChildProcessEvent(bot, child);
         child.send({ type: 'init', config: config });
-        child.on('close', childProcess => {
-            logToFileAndConsole('WARN', name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
-            child.removeAllListeners();
-            this.updateBotChildProcess(name, undefined);
-            if (childProcess == 0) console.log(`${name}: stopped success`);
-            else if (childProcess >= 2000) {
-                logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`);
-            } else {
-                logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`);
-                setTimeout(() => { this.createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
-            }
-        });
-        child.on('message', message => {
-            switch (message.type) {
-                case 'logToFile':
-                    if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, name.substring(0, 4), message.value.msg);
-                    else logToFileAndConsole(message.value.type, name, message.value.msg);
-                    break;
-                case 'setReloadCD':
-                    this.setBotReloadCD(name, message.value);
-                    break;
-                case 'setStatus':
-                    this.setBotStatus(name, message.value);
-                    break;
-                case 'setCrtType':
-                    this.setBotCrtType(name, message.value);
-                    break;
-                case 'dataToParent':
-                    botManager.handle.emit('data', message.value, name);
-                    break;
-                default:
-                    console.log(`Unknown message type ${message.type} from ${name}`);
-            }
-        });
     }
 
     async getBotInfo(name){
@@ -572,7 +579,6 @@ function main() {
     config.account.id.forEach((id, index) => {
         // id is a string
         setTimeout(() => {
-            botManager.initBot(id);
             botManager.createBot(id);
             timerdelay += 200;
         }, timerdelay);
