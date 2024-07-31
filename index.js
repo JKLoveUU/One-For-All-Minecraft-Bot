@@ -81,36 +81,37 @@ function logToFileAndConsole(type = "INFO", p = "CONSOLE", ...args) {
     logFile.write(nclog + "\n");
 }
 
-const bots = {
-    name: [],
-    bots: [],
-    handle: new EventEmitter(),
-    /**
-     * getBot
-     * @param {string | number} index index or name 
-     * @return {botsInstance}
-     */
-    getBot(index) {
+class BotInstance{
+    constructor(name, childProcess, type, crtType, debug, chat){
+        this.name = name;
+        this.childProcess = childProcess;
+        this.logTime = new Date();
+        this.status = 0;
+        this.type = type;
+        this.crtType = crtType;
+        this.reloadCD = config.setting.reconnect_CD;
+        this.debug = !!debug;
+        this.chat = !!chat;
+    }
+}
+
+class BotManager{
+    constructor(){
+        this.name = [];
+        this.bots = [];
+        this.handle = new EventEmitter();
+    }
+    getBot(index){
         if (isNaN(index)) {
             return this.bots.find(bot => bot.name === index) || -1;
         }
         return this.bots[index] || -1;
-    },
-    setBot(name, child, type = null, crtType = null, debug, chat) {
+    }
+    setBot(name, child, type = null, crtType = null, debug, chat){
         const index = this.name.indexOf(name);
         if (index === -1) {
             this.name.push(name);
-            this.bots.push({
-                name,
-                childProcess: child,
-                logTime: new Date(),
-                status: 0,
-                type,
-                crtType,
-                reloadCD: config.setting.reconnect_CD,
-                debug: !!debug,
-                chat: !!chat,
-            });
+            this.bots.push(new BotInstance(name, child, type, crtType, debug, chat));
         } else {
             const bot = this.bots[index];
             bot.childProcess = child;
@@ -120,32 +121,26 @@ const bots = {
             if (debug !== null) bot.debug = !!debug;
             if (chat !== null) bot.chat = !!chat;
         }
-    },
-    setBotStatus(name, status) {
+    }
+    setBotStatus(name, status){
         const bot = this.getBot(name);
         if (bot !== -1) {
             bot.status = status;
         }
-    },
-    setBotReloadCD(name, cd = 10_000) {
+    }
+    setBotReloadCD(name, cd = 10_000){
         const bot = this.getBot(name);
         if (bot !== -1) {
             bot.reloadCD = cd;
         }
-    },
-    /**
-     * 用於設定crtType
-     * @param {*} name 
-     * @param {*} type 
-     * @returns 
-     */
-    setBotCrtType(name, crtType) {
+    }
+    setBotCrtType(name, crtType){
         const bot = this.getBot(name);
         if (bot !== -1) {
             bot.crtType = crtType;
         }
-    },
-    async getBotInfo(name) {
+    }
+    async getBotInfo(name){
         const bot = this.getBot(name);
         if (bot === -1) {
             return -1;
@@ -163,7 +158,7 @@ const bots = {
             runingTask: data.runingTask
         };
         return botinfo;
-    },
+    }
     async getBotData(name) {
         const bot = this.getBot(name);
         if (bot === -1) {
@@ -182,7 +177,8 @@ const bots = {
             bot.childProcess.send({ type: 'dataRequire' });
         });
     }
-};
+}
+
 let currentSelect = 0;
 const rl = readline.createInterface({
     input: process.stdin,
@@ -194,9 +190,11 @@ const rl = readline.createInterface({
     },
 });
 
+let botManager = new BotManager();
+
 function addEventHandler() {
     rl.on('line', async (input) => {
-        let selectedBot = bots.getBot(currentSelect);
+        let selectedBot = botManager.getBot(currentSelect);
         //console.log(selectedBot)
         if (input.startsWith('.')) {
             const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
@@ -215,11 +213,11 @@ function addEventHandler() {
                     const typeLength = 7;
                     const crtTypeLength = 7; 
 
-                    console.log(`Total ${bots.name.length} bots`);
+                    console.log(`Total ${botManager.name.length} bots`);
                     console.log(`Id | Bot | Status | Type | CrtType`);
 
-                    bots.name.forEach((name, i) => {
-                        const bot = bots.getBot(name);
+                    botManager.name.forEach((name, i) => {
+                        const bot = botManager.getBot(name);
                         console.log(`${i} | ${name} | ${botstatus[bot.status]} | ${bot.type ? bot.type.padEnd(typeLength) : '-'.padEnd(typeLength)} | ${bot.crtType ? bot.crtType.padEnd(crtTypeLength) : '-'.padEnd(crtTypeLength)}`);
                     });
                     break;
@@ -248,12 +246,12 @@ function addEventHandler() {
                 // Switch to another bot
                 case 'switch':
                     const botIndex = parseInt(rlargs[0], 10);
-                    if (isNaN(botIndex) || botIndex >= bots.name.length || botIndex < 0) {
+                    if (isNaN(botIndex) || botIndex >= botManager.name.length || botIndex < 0) {
                         console.log("Invalid bot index. Usage: .switch <botIndex>");
                         return;
                     }
                     currentSelect = botIndex;
-                    const selectedBot = bots.getBot(botIndex);
+                    const selectedBot = botManager.getBot(botIndex);
                     process.title = `[Bot][${botIndex} ${selectedBot.name}] Use .switch to select a bot`;
                     console.log(`Switched to bot [${botIndex} - ${selectedBot.name}].`);
                     break;
@@ -392,7 +390,7 @@ function addEventHandler() {
             if (customId === 'botmenu-select') {
                 targetBot = values[0].slice(15)
                 console.log(targetBot)
-                let targetBotIns = bots.getBot(targetBot)
+                let targetBotIns = botManager.getBot(targetBot)
                 if (targetBotIns === -1) {
                     console.log("err at open menu for bot", targetBot)
                     await interaction.reply({
@@ -408,10 +406,10 @@ function addEventHandler() {
                         ephemeral: true
                     })
                     return
-                    let botinfo = await bots.getBotInfo(targetBot)
+                    let botinfo = await botManager.getBotInfo(targetBot)
                     interaction.reply(generateRaidBotControlMenu(botinfo))
                 } else if (targetBotIns.status >= 3200) {
-                    let botinfo = await bots.getBotInfo(targetBot)
+                    let botinfo = await botManager.getBotInfo(targetBot)
                     interaction.reply(generateGeneralBotControlMenu(botinfo))
                     return
                 }
@@ -491,29 +489,29 @@ function main() {
 }
 async function handleClose() {
     logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
-    for (const bot of bots.bots) {
+    for (const bot of botManager.bots) {
         if (bot.childProcess) {
             bot.childProcess.send({ type: "exit" });
         }
     }
     await Promise.all([
         setBotMenuNotInService(),
-        sleep(1000 + bots.name.length * 200),
+        sleep(1000 + botManager.name.length * 200),
     ]);
     logToFileAndConsole("INFO", "CONSOLE", "Close finished");
     client.destroy();
     process.exit(0);
 }
 function initBot(name) {
-    bots.setBot(name, undefined);
+    botManager.setBot(name, undefined);
     const profiles = loadProfiles();
     if (!profiles[name]) {
-        bots.setBotStatus(name, 1000);
+        botManager.setBotStatus(name, 1000);
         logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
         return;
     }
     if (!profiles[name].type) {
-        bots.setBotStatus(name, 1001)
+        botManager.setBotStatus(name, 1001)
         return
     }
     const { type, debug, chat } = profiles[name];
@@ -522,7 +520,7 @@ function initBot(name) {
         case 'raid':
         case 'auto':
         case 'material':
-            bots.setBot(name, undefined, type, type, !!debug, !!chat);
+            botManager.setBot(name, undefined, type, type, !!debug, !!chat);
             break;
         default:
             console.log(`Unknown bot type ${type} of ${name}`);
@@ -535,7 +533,7 @@ function initBot(name) {
  * @returns 
  */
 function createBot(name) {
-    let bot = bots.getBot(name);
+    let bot = botManager.getBot(name);
     let botFile;
     if (bot === -1) {
         console.log(`bot ${name} not init...`);
@@ -557,7 +555,7 @@ function createBot(name) {
     if (bot.debug) args.push("--debug");
     if (bot.chat) args.push("--chat");
     const child = fork(path.join(__dirname, botFile), args);
-    bots.setBot(name, child);
+    botManager.setBot(name, child);
     child.on('error', error => {
         console.log(`Error from ${name}:\n${error}`);
     });
@@ -565,7 +563,7 @@ function createBot(name) {
     child.on('close', childProcess => {
         logToFileAndConsole('WARN', name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
         child.removeAllListeners();
-        bots.setBot(name, undefined);
+        botManager.setBot(name, undefined);
         if (childProcess == 0) console.log(`${name}: stopped success`);
         else if (childProcess >= 2000) {
             logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`);
@@ -584,16 +582,16 @@ function createBot(name) {
                 else logToFileAndConsole(message.value.type, name, message.value.msg);
                 break;
             case 'setReloadCD':
-                bots.setBotReloadCD(name, message.value);
+                botManager.setBotReloadCD(name, message.value);
                 break;
             case 'setStatus':
-                bots.setBotStatus(name, message.value);
+                botManager.setBotStatus(name, message.value);
                 break;
             case 'setCrtType':
-                bots.setBotCrtType(name, message.value);
+                botManager.setBotCrtType(name, message.value);
                 break;
             case 'dataToParent':
-                bots.handle.emit('data', message.value, name);
+                botManager.handle.emit('data', message.value, name);
                 break;
             default:
                 console.log(`Unknown message type ${message.type} from ${name}`);
@@ -655,11 +653,11 @@ async function setBotMenuNotInService() {
 function generateBotMenu() {
     const embed = generateBotMenuEmbed();
     let opts = []
-    for (let i = 0; i < bots.bots.length; i++) {
+    for (let i = 0; i < botManager.bots.length; i++) {
         opts.push({
-            label: `${bots.name[i]}`,
+            label: `${botManager.name[i]}`,
             // description: 'Open menu of Basic operations',
-            value: `botmenu-select-${bots.name[i]}`,            //need fix
+            value: `botmenu-select-${botManager.name[i]}`,            //need fix
         })
     }
     const row1 = new MessageActionRow().addComponents(
@@ -697,22 +695,22 @@ function generateBotMenuEmbed() {
         url: 'https://github.com/JKLoveUU/Bot2',
     };
     let botsfield = '';
-    const longestLength = bots.name.reduce((longest, a) => {
+    const longestLength = botManager.name.reduce((longest, a) => {
         return a.length > longest ? a.length : longest;
     }, 0);
-    for (let i = 0; i < bots.bots.length; i++) {
-        botsfield += (`${i})`.padStart(parseInt(bots.bots.length / 10) + 2))
-        botsfield += (` ${bots.name[i]}`.padEnd(longestLength + 1))
-        botsfield += (` ${botstatus[bots.bots[i].status]}\n`)
+    for (let i = 0; i < botManager.bots.length; i++) {
+        botsfield += (`${i})`.padStart(parseInt(botManager.bots.length / 10) + 2))
+        botsfield += (` ${botManager.name[i]}`.padEnd(longestLength + 1))
+        botsfield += (` ${botstatus[botManager.bots[i].status]}\n`)
     }
-    botsfield = botsfield ? (`Id`.padEnd(parseInt(bots.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
+    botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
         .setAuthor(author)
         .setColor('GREEN')
         .setThumbnail("https://i.imgur.com/AfFp7pu.png")
         .addFields(
-            { name: `目前共 \`${bots.name.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
+            { name: `目前共 \`${botManager.name.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
         )
         .setTimestamp()
         .setFooter({ text: '更新於', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
