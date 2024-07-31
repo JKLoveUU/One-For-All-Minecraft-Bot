@@ -100,46 +100,45 @@ class BotInstance{
 class BotManager{
     constructor(){
         this.bots = [];
-        this.currentBot = null; // Current name of the selected bot
+        this.currentBot = null; // Current selected bot instance
         this.handle = new EventEmitter();
     }
-    getBot(index){
-        if (isNaN(index)) {
-            return this.bots.find(bot => bot.name === index) || -1;
-        }
-        return this.bots[index] || -1;
+    getBot(name){
+        return this.bots.find(bot => bot.name === name) || null;
     }
     getCurrentBot(){
-        return this.getBot(this.currentBot);
+        return this.currentBot;
     }
     setCurrentBot(name){
-        this.currentBot = name;
+        this.currentBot = this.getBot(name);
     }
     setBotStatus(name, status){
         const bot = this.getBot(name);
-        if (bot !== -1) {
+        if (bot != null) {
             bot.status = status;
         }
     }
     setBotReloadCD(name, cd = 10_000){
         const bot = this.getBot(name);
-        if (bot !== -1) {
+        if (bot != null) {
             bot.reloadCD = cd;
         }
     }
     setBotCrtType(name, crtType){
         const bot = this.getBot(name);
-        if (bot !== -1) {
+        if (bot != null) {
             bot.crtType = crtType;
         }
     }
     
+    // Singleton
     getBotInstance(name, child, type = null, crtType = null, debug, chat){
         if (!this.bots[name]) {
             this.bots[name] = new BotInstance(name, child, type, crtType, debug, chat);
         }
         return this.bots[name];
     }
+    
     registerBotChildProcessEvent(bot, child){
         child.on('error', error => {
             console.log(`Error from ${bot.name}:\n${error}`);
@@ -147,7 +146,7 @@ class BotManager{
         child.on('close', childProcess => {
             logToFileAndConsole('WARN', bot.name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
             child.removeAllListeners();
-            this.updateBotChildProcess(bot.name, null);
+            this.updateBotChildProcess(bot, null);
             if (childProcess == 0) console.log(`${bot.name}: stopped success`);
             else if (childProcess >= 2000) {
                 logToFileAndConsole("ERROR", bot.name, `closed with err code: ${childProcess}`);
@@ -230,6 +229,9 @@ class BotManager{
     
     createBot(name){
         const bot = this.initBot(name);
+        if (botManager.currentBot == null){
+            botManager.currentBot = bot;
+        }
         let botFilePath = this.getBotFilePath(bot.crtType);
         let args = [name, bot.type];
         if (bot.debug) args.push("--debug");
@@ -292,7 +294,7 @@ const rl = readline.createInterface({
 
 let botManager = new BotManager();
 
-function addEventHandler() {
+function addConsoleEventHandler() {
     rl.on('line', async (input) => {
         let selectedBot = botManager.getCurrentBot();
         //console.log(selectedBot)
@@ -326,13 +328,12 @@ function addEventHandler() {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
                         selectedBot.childProcess.send({ type: "exit" });
-                        currentSelect = -1;         
                         process.title = '[Bot][-1] type .switch to select a bot';
                     }
                     break;
                 // Reload the bot
                 case 'reload':
-                    if (selectedBot == -1) {
+                    if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
                         selectedBot.childProcess.send({ type: "reload" });
@@ -349,31 +350,25 @@ function addEventHandler() {
                         console.log("Invalid bot index. Usage: .switch <botIndex>");
                         return;
                     }
-                    currentSelect = botIndex;
-                    const selectedBot = botManager.getBot(botIndex);
+                    const selectedBot = botManager.getCurrentBot();
                     process.title = `[Bot][${botIndex} ${selectedBot.name}] Use .switch to select a bot`;
                     console.log(`Switched to bot [${botIndex} - ${selectedBot.name}].`);
                     break;
                 default:
-                    if (selectedBot == -1 || selectedBot == undefined) {
+                    if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
-                    } else if (selectedBot.childProcess == undefined && selectedBot.status == 0) {
-                        console.log(`The bot is not started. Use .switch to select a bot.`);
-                    } else if (selectedBot.childProcess == undefined) {
-                        console.log(`The bot is not online. Please try again later.`);
+                    } else if (selectedBot.childProcess == null) {
+                        console.log(`No child process for bot ${selectedBot.name}`);
                     } else {
                         selectedBot.childProcess.send({ type: "cmd", text: input });
                     }
-                    //console.log(`unknown command '${rlCommandName.substring(1)}'`);
                     break;
             }
         } else {
-            if (selectedBot == -1 || selectedBot == undefined) {
+            if (selectedBot == null) {
                 console.log(`No bot selected. Use .switch to select a bot.`);
-            } else if (selectedBot.childProcess == undefined && selectedBot.status == 0) {
-                console.log(`The bot is not started. Use .switch to select a bot.`);
-            } else if (selectedBot.childProcess == undefined) {
-                console.log(`The bot is not online. Please try again later.`);
+            } else if (selectedBot.childProcess == null) {
+                console.log(`No child process for bot ${selectedBot.name}`);
             } else {
                 selectedBot.childProcess.send({ type: "chat", text: input });
             }
@@ -383,6 +378,9 @@ function addEventHandler() {
     rl.on('close', async () => {
         await handleClose()
     });
+}
+
+function addDiscordBotEventHandler(){
     client.on('ready', async () => {
         logToFileAndConsole("INFO", "CONSOLE", `Discord bot Logged in as ${client.user.tag}`);
         client.user.setPresence({
@@ -554,6 +552,9 @@ function addEventHandler() {
             await notImplemented(interaction);
         }
     });
+}
+
+function addMainProcessEventHandler() {
     process.on('uncaughtException', err => {
         logToFileAndConsole("ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
         // console.log('Uncaught:\n', err)
@@ -568,7 +569,9 @@ function main() {
     logToFileAndConsole("INFO", "CONSOLE", `Press Ctrl+C to exit   PID: ${process.pid}`);
     logToFileAndConsole("INFO", "CONSOLE", "Bot Start");
     // console.log(config.account.id)
-    addEventHandler();
+    addMainProcessEventHandler();
+    addDiscordBotEventHandler();
+    addConsoleEventHandler();
     try{
         client.login(config.discord_setting.token)
     }catch(err){
