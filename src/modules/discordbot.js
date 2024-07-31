@@ -125,7 +125,11 @@ function addDiscordBotEventHandler(){
                         ephemeral: true
                     })
                     console.log(`Bot close by Discord - ${interaction.user.username}`)
-                    await handleClose()
+                    botManager.stop();
+                    const waitingTime = 1000 + botManager.getBotNums() * 200;
+                    await DiscordBotStop(waitingTime);
+                    logger(true, "INFO", "CONSOLE", "Close finished");
+                    process.exit(0);
                     break;
                 default:
                     await notImplemented(interaction);
