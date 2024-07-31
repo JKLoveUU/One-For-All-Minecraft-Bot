@@ -97,8 +97,8 @@ class BotInstance{
 
 class BotManager{
     constructor(){
-        this.name = [];
         this.bots = [];
+        this.currentBot = null; // Current name of the selected bot
         this.handle = new EventEmitter();
     }
     getBot(index){
@@ -107,20 +107,11 @@ class BotManager{
         }
         return this.bots[index] || -1;
     }
-    setBot(name, child, type = null, crtType = null, debug, chat){
-        const index = this.name.indexOf(name);
-        if (index === -1) {
-            this.name.push(name);
-            this.bots.push(new BotInstance(name, child, type, crtType, debug, chat));
-        } else {
-            const bot = this.bots[index];
-            bot.childProcess = child;
-            bot.logTime = new Date();
-            if (type !== null) bot.type = type;
-            if (crtType !== null) bot.crtType = crtType;
-            if (debug !== null) bot.debug = !!debug;
-            if (chat !== null) bot.chat = !!chat;
-        }
+    getCurrentBot(){
+        return this.getBot(this.currentBot);
+    }
+    setCurrentBot(name){
+        this.currentBot = name;
     }
     setBotStatus(name, status){
         const bot = this.getBot(name);
@@ -140,6 +131,108 @@ class BotManager{
             bot.crtType = crtType;
         }
     }
+    
+    getBotInstance(name, child, type = null, crtType = null, debug, chat){
+        if (!this.bots[name]) {
+            this.bots[name] = new BotInstance(name, child, type, crtType, debug, chat);
+        }
+        return this.bots[name];
+    }
+    updateBotChildProcess(name, child){
+        const bot = this.getBot(name);
+        if (bot !== -1) {
+            bot.childProcess = child;
+            bot.logTime = new Date();
+        }
+    }
+    initBot(name){
+        const profiles = loadProfiles();
+        if (!profiles[name]) {
+            logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
+            process.exit(1000);
+        }
+        if (!profiles[name].type) {
+            logToFileAndConsole('ERROR', name, `profiles中 ${name} 沒有type資料`);
+            process.exit(1001);
+        }
+        const { type, debug, chat } = profiles[name];
+        switch (type) {
+            case 'general':
+            case 'raid':
+            case 'auto':
+            case 'material':
+                this.bots.push(this.getBotInstance(name, undefined, type, type, !!debug, !!chat));
+                break;
+            default:
+                console.log(`Unknown bot type ${type} of ${name}`);
+                break;
+        }
+    }
+
+    createBot(name){
+        const bot = this.getBot(name);
+        if (bot === -1) {
+            console.log(`bot ${name} not init...`);
+            return;
+        }
+        let botFile;
+        switch (bot.crtType) {
+            case 'general':
+                botFile = './bots/generalbot.js';
+                break;
+            case 'raid':
+                botFile = './bots/raidbot.js';
+                break;
+            default:
+                console.log(`Invalid crtType: ${bot.crtType}\nunable to create... ${name}`);
+                return;
+                break;
+        }
+        let args = [name, bot.type];
+        if (bot.debug) args.push("--debug");
+        if (bot.chat) args.push("--chat");
+        const child = fork(path.join(__dirname, botFile), args);
+        this.updateBotChildProcess(name, child);
+        child.on('error', error => {
+            console.log(`Error from ${name}:\n${error}`);
+        });
+        child.send({ type: 'init', config: config });
+        child.on('close', childProcess => {
+            logToFileAndConsole('WARN', name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
+            child.removeAllListeners();
+            this.updateBotChildProcess(name, undefined);
+            if (childProcess == 0) console.log(`${name}: stopped success`);
+            else if (childProcess >= 2000) {
+                logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`);
+            } else {
+                logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`);
+                setTimeout(() => { this.createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
+            }
+        });
+        child.on('message', message => {
+            switch (message.type) {
+                case 'logToFile':
+                    if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, name.substring(0, 4), message.value.msg);
+                    else logToFileAndConsole(message.value.type, name, message.value.msg);
+                    break;
+                case 'setReloadCD':
+                    this.setBotReloadCD(name, message.value);
+                    break;
+                case 'setStatus':
+                    this.setBotStatus(name, message.value);
+                    break;
+                case 'setCrtType':
+                    this.setBotCrtType(name, message.value);
+                    break;
+                case 'dataToParent':
+                    botManager.handle.emit('data', message.value, name);
+                    break;
+                default:
+                    console.log(`Unknown message type ${message.type} from ${name}`);
+            }
+        });
+    }
+
     async getBotInfo(name){
         const bot = this.getBot(name);
         if (bot === -1) {
@@ -194,7 +287,7 @@ let botManager = new BotManager();
 
 function addEventHandler() {
     rl.on('line', async (input) => {
-        let selectedBot = botManager.getBot(currentSelect);
+        let selectedBot = botManager.getCurrentBot();
         //console.log(selectedBot)
         if (input.startsWith('.')) {
             const [rlCommandName, ...rlargs] = input.trim().split(/\s+/);
@@ -202,7 +295,7 @@ function addEventHandler() {
             switch (rlCommandName.substring(1)) {
                 // Create a new bot
                 case 'create':
-                    initBot(rlargs[0]);
+                    botManager.initBot(rlargs[0]);
                     break;
                 // Force close the bot
                 case 'ff':    
@@ -213,21 +306,20 @@ function addEventHandler() {
                     const typeLength = 7;
                     const crtTypeLength = 7; 
 
-                    console.log(`Total ${botManager.name.length} bots`);
+                    console.log(`Total ${botManager.bots.length} bots`);
                     console.log(`Id | Bot | Status | Type | CrtType`);
 
-                    botManager.name.forEach((name, i) => {
-                        const bot = botManager.getBot(name);
-                        console.log(`${i} | ${name} | ${botstatus[bot.status]} | ${bot.type ? bot.type.padEnd(typeLength) : '-'.padEnd(typeLength)} | ${bot.crtType ? bot.crtType.padEnd(crtTypeLength) : '-'.padEnd(crtTypeLength)}`);
+                    botManager.bots.forEach((bot, i) => {
+                        console.log(`${i} | ${bot.name} | ${botstatus[bot.status]} | ${bot.type ? bot.type.padEnd(typeLength) : '-'.padEnd(typeLength)} | ${bot.crtType ? bot.crtType.padEnd(crtTypeLength) : '-'.padEnd(crtTypeLength)}`);
                     });
                     break;
                 // Close the bot
                 case 'exit':
-                    if (selectedBot == -1) {
+                    if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
                         selectedBot.childProcess.send({ type: "exit" });
-                        currentSelect = -1;
+                        currentSelect = -1;         
                         process.title = '[Bot][-1] type .switch to select a bot';
                     }
                     break;
@@ -246,7 +338,7 @@ function addEventHandler() {
                 // Switch to another bot
                 case 'switch':
                     const botIndex = parseInt(rlargs[0], 10);
-                    if (isNaN(botIndex) || botIndex >= botManager.name.length || botIndex < 0) {
+                    if (isNaN(botIndex) || botIndex >= botManager.bots.length || botIndex < 0) {
                         console.log("Invalid bot index. Usage: .switch <botIndex>");
                         return;
                     }
@@ -480,8 +572,8 @@ function main() {
     config.account.id.forEach((id, index) => {
         // id is a string
         setTimeout(() => {
-            initBot(id);
-            createBot(id);
+            botManager.initBot(id);
+            botManager.createBot(id);
             timerdelay += 200;
         }, timerdelay);
     });
@@ -496,108 +588,13 @@ async function handleClose() {
     }
     await Promise.all([
         setBotMenuNotInService(),
-        sleep(1000 + botManager.name.length * 200),
+        sleep(1000 + botManager.bots.length * 200),
     ]);
     logToFileAndConsole("INFO", "CONSOLE", "Close finished");
     client.destroy();
     process.exit(0);
 }
-function initBot(name) {
-    botManager.setBot(name, undefined);
-    const profiles = loadProfiles();
-    if (!profiles[name]) {
-        botManager.setBotStatus(name, 1000);
-        logToFileAndConsole('ERROR', name, `profiles中無 ${name} 資料`);
-        return;
-    }
-    if (!profiles[name].type) {
-        botManager.setBotStatus(name, 1001)
-        return
-    }
-    const { type, debug, chat } = profiles[name];
-    switch (type) {
-        case 'general':
-        case 'raid':
-        case 'auto':
-        case 'material':
-            botManager.setBot(name, undefined, type, type, !!debug, !!chat);
-            break;
-        default:
-            console.log(`Unknown bot type ${type} of ${name}`);
-            break;
-    }
-}
-/**
- * create Bot with the crtType
- * @param {*} name 
- * @returns 
- */
-function createBot(name) {
-    let bot = botManager.getBot(name);
-    let botFile;
-    if (bot === -1) {
-        console.log(`bot ${name} not init...`);
-        return;
-    }
-    switch (bot.crtType) {
-        case 'general':
-            botFile = './bots/generalbot.js';
-            break;
-        case 'raid':
-            botFile = './bots/raidbot.js';
-            break;
-        default:
-            console.log(`Invalid crtType: ${bot.crtType}\nunable to create... ${name}`);
-            return;
-            break;
-    }
-    let args = [name, bot.type];
-    if (bot.debug) args.push("--debug");
-    if (bot.chat) args.push("--chat");
-    const child = fork(path.join(__dirname, botFile), args);
-    botManager.setBot(name, child);
-    child.on('error', error => {
-        console.log(`Error from ${name}:\n${error}`);
-    });
-    child.send({ type: 'init', config: config });
-    child.on('close', childProcess => {
-        logToFileAndConsole('WARN', name, `Exit code: ${exitcode[childProcess]} (${childProcess})`);
-        child.removeAllListeners();
-        botManager.setBot(name, undefined);
-        if (childProcess == 0) console.log(`${name}: stopped success`);
-        else if (childProcess >= 2000) {
-            logToFileAndConsole("ERROR", name, `closed with err code: ${childProcess}`);
-        } else if(childProcess == 202){
-            logToFileAndConsole("ERROR", name, `設定檔案錯誤 已停止重啟`);
-            console.log("請使用 .create <botname> 再次開啟bot");
-        }else {
-            logToFileAndConsole("INFO", name, `restart at ${bot.reloadCD / 1000} second`);
-            setTimeout(() => { createBot(name) }, (bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD));
-        }
-    });
-    child.on('message', message => {
-        switch (message.type) {
-            case 'logToFile':
-                if (bot.crtType == 'raid') logToFileAndConsole(message.value.type, name.substring(0, 4), message.value.msg);
-                else logToFileAndConsole(message.value.type, name, message.value.msg);
-                break;
-            case 'setReloadCD':
-                botManager.setBotReloadCD(name, message.value);
-                break;
-            case 'setStatus':
-                botManager.setBotStatus(name, message.value);
-                break;
-            case 'setCrtType':
-                botManager.setBotCrtType(name, message.value);
-                break;
-            case 'dataToParent':
-                botManager.handle.emit('data', message.value, name);
-                break;
-            default:
-                console.log(`Unknown message type ${message.type} from ${name}`);
-        }
-    });
-}
+
 async function getChannelMsgFetch(channel, id) {
     let oldmenu;
     try {
@@ -655,9 +652,9 @@ function generateBotMenu() {
     let opts = []
     for (let i = 0; i < botManager.bots.length; i++) {
         opts.push({
-            label: `${botManager.name[i]}`,
+            label: `${botManager.bots[i].name}`,
             // description: 'Open menu of Basic operations',
-            value: `botmenu-select-${botManager.name[i]}`,            //need fix
+            value: `botmenu-select-${botManager.bots[i].name}`,            //need fix
         })
     }
     const row1 = new MessageActionRow().addComponents(
@@ -695,12 +692,10 @@ function generateBotMenuEmbed() {
         url: 'https://github.com/JKLoveUU/Bot2',
     };
     let botsfield = '';
-    const longestLength = botManager.name.reduce((longest, a) => {
-        return a.length > longest ? a.length : longest;
-    }, 0);
+    const longestLength = 100; // need to fix
     for (let i = 0; i < botManager.bots.length; i++) {
         botsfield += (`${i})`.padStart(parseInt(botManager.bots.length / 10) + 2))
-        botsfield += (` ${botManager.name[i]}`.padEnd(longestLength + 1))
+        botsfield += (` ${botManager.bots[i].name}`.padEnd(longestLength + 1))
         botsfield += (` ${botstatus[botManager.bots[i].status]}\n`)
     }
     botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
@@ -710,7 +705,7 @@ function generateBotMenuEmbed() {
         .setColor('GREEN')
         .setThumbnail("https://i.imgur.com/AfFp7pu.png")
         .addFields(
-            { name: `目前共 \`${botManager.name.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
+            { name: `目前共 \`${botManager.bots.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
         )
         .setTimestamp()
         .setFooter({ text: '更新於', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
