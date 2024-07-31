@@ -6,6 +6,7 @@ const path = require("path");
 const config = require(`${process.cwd()}/config.toml`);
 const { exit } = require("process");
 const exitcode = require("./exitcode");
+const botstatus = require("./botstatus");
 const { log } = require("console");
 
 class BotManager {
@@ -16,6 +17,12 @@ class BotManager {
   }
   getBotByName(name) {
     return this.bots.find((bot) => bot.name === name) || null;
+  }
+  getBotByIndex(index) {
+    return this.bots[index] || null;
+  }
+  getBotNums() {
+    return this.bots.length;
   }
   getCurrentBot() {
     return this.currentBot;
@@ -34,6 +41,21 @@ class BotManager {
       );
     }
     return this.bots[name];
+  }
+  printBotList() {
+    const typeLength = 7;
+    const crtTypeLength = 7; 
+    this.bots.forEach((bot, i) => {
+      console.log(
+        `${i} | ${bot.name} | ${botstatus[bot.status]} | ${
+          bot.type ? bot.type.padEnd(typeLength) : "-".padEnd(typeLength)
+        } | ${
+          bot.crtType
+            ? bot.crtType.padEnd(crtTypeLength)
+            : "-".padEnd(crtTypeLength)
+        }`
+      );
+    });
   }
   setCurrentBotByName(name) {
     const bot = this.getBotByName(name);
@@ -64,14 +86,18 @@ class BotManager {
     }
   }
 
-  // find the bot instance by name and delete it from the array
-  deleteBotInstanceByName(name) {
-    this.bots = this.bots.filter((bot) => bot.name !== name);
+  // delete the bot from the array
+  deleteBotInstance(bot) {
+    if (bot != null) {
+      this.bots = this.bots.filter((b) => b.name !== bot.name);
+    }
   }
 
-  deleteBotChildProcess(bot) {
-    if (bot.childProcess != null) {
-      bot.childProcess.kill();
+  stop(){
+    for (const bot of this.bots) {
+        if (bot.childProcess) {
+            bot.childProcess.send({ type: "exit" });
+        }
     }
   }
 
@@ -99,28 +125,29 @@ class BotManager {
 
   registerBotChildProcessEvent(bot, child) {
     child.on("error", (error) => {
-      console.log(`Error from ${bot.name}:\n${error}`);
+      logToFileAndConsole("ERROR", "CONSOLE", `${bot.name} error: ${error}`);
     });
-    child.on("close", (childProcess) => {
-      logToFileAndConsole(
-        "WARN",
-        bot.name,
-        `Exit code: ${exitcode[childProcess]} (${childProcess})`
-      );
+    child.on("exit", (childProcess) => {
       child.removeAllListeners();
       this.setBotChildProcess(bot, null);
-      if (childProcess == 0) console.log(`${bot.name}: stopped success`);
-      else if (childProcess >= 2000) {
+      this.deleteBotInstance(bot);
+      if (childProcess == 0) {
+        logToFileAndConsole(
+          "INFO",
+          "CONSOLE",
+          `${bot.name} closed successfully`
+        );
+      } else if (childProcess >= 2000) {
         logToFileAndConsole(
           "ERROR",
-          bot.name,
-          `closed with err code: ${childProcess}`
+          "CONSOLE",
+          `${bot.name} closed with err code: ${childProcess}`
         );
       } else {
         logToFileAndConsole(
           "INFO",
-          bot.name,
-          `restart at ${bot.reloadCD / 1000} second`
+          "CONSOLE",
+          `${bot.name} restart in ${bot.reloadCD / 1000} second`
         );
         setTimeout(
           () => {
@@ -166,16 +193,16 @@ class BotManager {
 
   initBot(name) {
     if (this.bots.some((bot) => bot.name === name)) {
-      logToFileAndConsole("ERROR", name, `Bot ${name} 已經存在`);
+      logToFileAndConsole("ERROR", name, `Bot: ${name} 已經存在`);
       return;
     }
     const profiles = this.loadProfiles();
     if (!profiles[name]) {
-      logToFileAndConsole("ERROR", name, `profiles中無 ${name} 資料`);
+      logToFileAndConsole("ERROR", name, `profiles.js 中無 ${name} 資料`);
       process.exit(1000);
     }
     if (!profiles[name].type) {
-      logToFileAndConsole("ERROR", name, `profiles中 ${name} 沒有type資料`);
+      logToFileAndConsole("ERROR", name, `profiles.js 中 ${name} 沒有type資料`);
       process.exit(1001);
     }
     const { type, debug, chat } = profiles[name];

@@ -75,19 +75,16 @@ function addConsoleEventHandler() {
                     const typeLength = 7;
                     const crtTypeLength = 7; 
 
-                    console.log(`Total ${botManager.bots.length} bots`);
+                    console.log(`Total ${botManager.getBotNums()} bots`);
                     console.log(`Id | Bot | Status | Type | CrtType`);
 
-                    botManager.bots.forEach((bot, i) => {
-                        console.log(`${i} | ${bot.name} | ${botstatus[bot.status]} | ${bot.type ? bot.type.padEnd(typeLength) : '-'.padEnd(typeLength)} | ${bot.crtType ? bot.crtType.padEnd(crtTypeLength) : '-'.padEnd(crtTypeLength)}`);
-                    });
+                    botManager.printBotList();
                     break;
                 // Close the bot
                 case 'exit':
                     if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
-                        botManager.deleteBotInstanceByName(selectedBot.name);
                         selectedBot.childProcess.send({ type: "exit" });
                         process.title = '[Bot][-1] type .switch to select a bot';
                     }
@@ -97,7 +94,7 @@ function addConsoleEventHandler() {
                     if (selectedBot == null) {
                         console.log(`No bot selected. Use .switch to select a bot.`);
                     } else {
-                        botManager.deleteBotInstanceByName(selectedBot.name);
+                        botManager.deleteBotInstance(selectedBot);
                         selectedBot.childProcess.send({ type: "reload" });
                     }
                     break;
@@ -354,14 +351,10 @@ function main() {
 }
 async function handleClose() {
     logToFileAndConsole("INFO", "CONSOLE", "Closing application...");
-    for (const bot of botManager.bots) {
-        if (bot.childProcess) {
-            bot.childProcess.send({ type: "exit" });
-        }
-    }
+    botManager.stop();
     await Promise.all([
         setBotMenuNotInService(),
-        sleep(1000 + botManager.bots.length * 200),
+        sleep(1000 + botManager.getBotNums() * 200),
     ]);
     logToFileAndConsole("INFO", "CONSOLE", "Close finished");
     client.destroy();
@@ -423,11 +416,12 @@ async function setBotMenuNotInService() {
 function generateBotMenu() {
     const embed = generateBotMenuEmbed();
     let opts = []
-    for (let i = 0; i < botManager.bots.length; i++) {
+    for (let i = 0; i < botManager.getBotNums(); i++) {
+        const bot = botManager.getBotByIndex(i);
         opts.push({
-            label: `${botManager.bots[i].name}`,
+            label: `${bot.name}`,
             // description: 'Open menu of Basic operations',
-            value: `botmenu-select-${botManager.bots[i].name}`,            //need fix
+            value: `botmenu-select-${bot.name}`,            //need fix
         })
     }
     const row1 = new MessageActionRow().addComponents(
@@ -466,19 +460,20 @@ function generateBotMenuEmbed() {
     };
     let botsfield = '';
     const longestLength = 100; // need to fix
-    for (let i = 0; i < botManager.bots.length; i++) {
-        botsfield += (`${i})`.padStart(parseInt(botManager.bots.length / 10) + 2))
-        botsfield += (` ${botManager.bots[i].name}`.padEnd(longestLength + 1))
-        botsfield += (` ${botstatus[botManager.bots[i].status]}\n`)
+    for (let i = 0; i < botManager.getBotNums(); i++) {
+        const bot = botManager.getBotByIndex(i);
+        botsfield += (`${i})`.padStart(parseInt(botManager.getBotNums() / 10) + 2))
+        botsfield += (` ${bot.name}`.padEnd(longestLength + 1))
+        botsfield += (` ${botstatus[bot.status]}\n`)
     }
-    botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.bots.length / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
+    botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.getBotNums() / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
         .setAuthor(author)
         .setColor('GREEN')
         .setThumbnail("https://i.imgur.com/AfFp7pu.png")
         .addFields(
-            { name: `目前共 \`${botManager.bots.length}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
+            { name: `目前共 \`${botManager.getBotNums()}\` 隻 bot`, value: '\`\`\`' + (botsfield ? botsfield : '無') + '\`\`\`' },
         )
         .setTimestamp()
         .setFooter({ text: '更新於', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
