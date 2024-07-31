@@ -106,7 +106,11 @@ class BotManager {
 
   loadProfiles() {
     const profilesPath = path.join(process.cwd(), "profiles.json");
-    logToFileAndConsole("INFO", "BOTMANAGER", `Reading profile settings from path: ${profilesPath}`);
+    logToFileAndConsole(
+      "INFO",
+      "BOTMANAGER",
+      `Reading profile settings from path: ${profilesPath}`
+    );
     try {
       return require(profilesPath);
     } catch (err) {
@@ -196,32 +200,33 @@ class BotManager {
 
   initBot(name) {
     if (this.bots.some((bot) => bot.name === name)) {
-      logToFileAndConsole("ERROR", name, `Bot: ${name} 已經存在`);
+      logToFileAndConsole("ERROR", "BOTMANAGER", `Bot: ${name} 已經存在`);
       return;
     }
+  
     const profiles = this.loadProfiles();
-    if (!profiles[name]) {
-      logToFileAndConsole("ERROR", name, `profiles.js 中無 ${name} 資料`);
-      process.exit(1000);
+    const profile = profiles[name];
+  
+    if (!profile) {
+      logToFileAndConsole("ERROR", "BOTMANAGER", `profiles.js 中無 ${name} 資料`);
+      return;
     }
-    if (!profiles[name].type) {
-      logToFileAndConsole("ERROR", name, `profiles.js 中 ${name} 沒有type資料`);
-      process.exit(1001);
+  
+    const { type, debug, chat } = profile;
+  
+    if (!type) {
+      logToFileAndConsole("ERROR", "BOTMANAGER", `profiles.js 中 ${name} 沒有type資料`);
+      return;
     }
-    const { type, debug, chat } = profiles[name];
+  
+    const validTypes = ["general", "raid", "auto", "material"];
+    if (!validTypes.includes(type)) {
+      console.log(`Unknown bot type ${type} of ${name}`);
+      return null;
+    }
+  
     const bot = this.getBotInstance(name, null, type, type, !!debug, !!chat);
-    switch (type) {
-      case "general":
-      case "raid":
-      case "auto":
-      case "material":
-        this.bots.push(bot);
-        break;
-      default:
-        console.log(`Unknown bot type ${type} of ${name}`);
-        process.exit(1000);
-        break;
-    }
+    this.bots.push(bot);
     return bot;
   }
 
@@ -232,7 +237,11 @@ class BotManager {
       case "raid":
         return `${process.cwd()}/bots/raidbot.js`;
       default:
-        logToFileAndConsole("ERROR", "BOTMANAGER", `Invalid crtType: ${crtType}`);
+        logToFileAndConsole(
+          "ERROR",
+          "BOTMANAGER",
+          `Invalid crtType: ${crtType}`
+        );
         exit(1000);
         return;
     }
@@ -240,6 +249,7 @@ class BotManager {
 
   createBot(name) {
     const bot = this.initBot(name);
+    if(bot == null) return;
     if (this.currentBot == null) {
       this.currentBot = bot;
     }
@@ -251,6 +261,7 @@ class BotManager {
     this.setBotChildProcess(bot, child);
     this.registerBotChildProcessEvent(bot, child);
     child.send({ type: "init", config: config });
+    return bot;
   }
 
   async getBotInfo(name) {
