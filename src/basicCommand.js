@@ -393,8 +393,8 @@ async function cmd_info(task) {
             if (itemTemplate.stackSize != 1) {
                 logString += `x \x1b[33m${item.count}\x1b[0m `
             } else logString += `\x1b[33m${''.padEnd(4, ' ')}\x1b[0m `
-            if (itemTemplate.enchantCategories && itemTemplate.enchantCategories.includes('breakable')) {
-                let damagePercentage = Math.round((itemTemplate.maxDurability - item.nbt.value.Damage.value) * 1000 / itemTemplate.maxDurability) / 10;
+            if (itemTemplate.enchantCategories != undefined && itemTemplate.enchantCategories.includes('breakable') && item.durabilityUsed != null) {
+                let damagePercentage = Math.round((itemTemplate.maxDurability - item.durabilityUsed) * 1000 / itemTemplate.maxDurability) / 10;
                 if (damagePercentage > 95) logString += `\x1b[32m${damagePercentage}%\x1b[0m `
                 else if (damagePercentage > 50) logString += `\x1b[33m${damagePercentage}%\x1b[0m `
                 else logString += `\x1b[31m${damagePercentage}%\x1b[0m `
