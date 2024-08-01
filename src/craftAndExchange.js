@@ -157,7 +157,7 @@ async function autoset(task) {
     for (let mobstoattack in bot.entities) {
         //console.log(bot.entities[mobstoattack])
         if (bot.entities[mobstoattack].position.distanceTo(bot.entity.position) > 5) continue;
-        if (bot.entities[mobstoattack].mobType === 'Glow Item Frame' || bot.entities[mobstoattack].mobType === 'Item Frame') {
+        if (bot.entities[mobstoattack].displayName === 'Glow Item Frame' || bot.entities[mobstoattack].displayName === 'Item Frame') {
             IDIF.push(bot.entities[mobstoattack]);
         }
         //break;
