@@ -19,7 +19,7 @@ const sd = require('silly-datetime');
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const profiles = require(`${process.cwd()}/profiles.json`);
 const commands = []
-const basicCommand = require(`./src/basicCommand`)
+const basicCommand = require(`../src/basicCommand`)
 let pcfg = {
   "farm": ["ExampleFarm1"],
   "printEff": true,

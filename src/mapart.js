@@ -297,14 +297,14 @@ const mapart = {
         mcData = require('minecraft-data')(bot.version)
         //mapart.json
         if (!fs.existsSync(`${process.cwd()}/config/${bot_id}/mapart.json`)) {
-            logger(true, 'INFO', `Creating config - mapart.json`)
+            logger(true, 'INFO', process.argv[2], `Creating config - mapart.json`)
             save(mapart_cfg)
         } else {
-            //bot.logger(true,"INFO",`加載個別Bot地圖畫設定資訊...`)
+            //bot.logger(true,"INFO",process.argv[2],`加載個別Bot地圖畫設定資訊...`)
             try{
                 mapart_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`)
             }catch(e){
-                bot.logger(true,"ERROR",`個別Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/${bot_id}/mapart.json`)
+                bot.logger(true,"ERROR",process.argv[2],`個別Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/${bot_id}/mapart.json`)
                 await sleep(1000)
                 console.log("Please Check The Json Format")
                 console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
@@ -316,7 +316,7 @@ const mapart = {
         }
         //mapart.json (global)
         if (!fs.existsSync(`${process.cwd()}/config/global/mapart.json`)) {
-            logger(true, 'INFO', `Creating global config - mapart.json`)
+            logger(true, 'INFO', process.argv[2], `Creating global config - mapart.json`)
             await fsp.writeFile(`${process.cwd()}/config/global/mapart.json`, JSON.stringify(mapart_global_cfg, null, '\t'), function (err, result) {
                 if (err) console.log('mapart save error', err);
             });
@@ -324,7 +324,7 @@ const mapart = {
             try{
                 mapart_global_cfg = await readConfig(`${process.cwd()}/config/global/mapart.json`)
             }catch(e){
-                bot.logger(true,"ERROR",`全Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/global/mapart.json`)
+                bot.logger(true,"ERROR",process.argv[2], `全Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/global/mapart.json`)
                 await sleep(1000)
                 console.log("Please Check The Json Format")
                 console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
