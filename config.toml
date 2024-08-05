@@ -1,5 +1,6 @@
 # Version 1.0.0
 [discord_setting]                                   # Discord 設定皆用字串(用"兩邊框起來的)   !!!
+  activate = false                                   # [ true / false ] 這個不用字串。是否開啟 Discord Bot
   token = "-"                                       # Discord Bot Token
   owners= "123456789012345678"                      # Owner 目前這設定沒啥用... (或許之後會用於tag 或啥的)
   appId = "123456789012345678"                      # Discord Bot Application ID

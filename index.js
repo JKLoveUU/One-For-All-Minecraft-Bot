@@ -143,7 +143,9 @@ async function handleClose() {
   logger(true, "INFO", "CONSOLE", "Closing application...");
   botManager.stop();
   const waitingTime = 1000 + botManager.getBotNums() * 200;
-  await DiscordBotStop(waitingTime);
+  if(config.discord_setting.activate){
+    await DiscordBotStop(waitingTime);
+  }
   logger(true, "INFO", "CONSOLE", "Close finished");
   process.exit(0);
 }
@@ -158,7 +160,9 @@ function main() {
   );
   addMainProcessEventHandler();
   addConsoleEventHandler();
-  DiscordBotStart(botManager);
+  if(config.discord_setting.activate){
+    DiscordBotStart(botManager);
+  }
   process.title = "[Bot][-1] type .switch to select a bot";
   let timerdelay = 3005;
   config.account.id.forEach((id) => {
