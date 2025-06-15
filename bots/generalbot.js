@@ -165,6 +165,7 @@ const bot = (() => { // createMcBot
     })
     bot._client.on('playerlist_header', (data) => {
         botTabhandler(data)
+        botScoreBoardhandler(bot.scoreboard['1'])
     })
     //---------------
     bot.on('error', async (error) => {
@@ -461,13 +462,41 @@ function botTabhandler(data) {
     const tabData = tabMsg.toString();
     const serverData = serverRegex.exec(tabData);
     if (serverData != null && serverData.length > 0) botinfo.server = parseInt(serverData[1])
-    const emeraldData = emeraldRegex.exec(tabData);
-    if (emeraldData != null && emeraldData.length > 0) botinfo.balance = parseInt(emeraldData[1].replace(/,/g, ''))
-    const coinData = coinRegex.exec(tabData);
-    if (coinData != null && coinData.length > 0) botinfo.coin = parseInt(coinData[1].replace(/,/g, ''))
-    botinfo.tabUpdateTime = new Date()
+    // const emeraldData = emeraldRegex.exec(tabData);
+    // if (emeraldData != null && emeraldData.length > 0) botinfo.balance = parseInt(emeraldData[1].replace(/,/g, ''))
+    // const coinData = coinRegex.exec(tabData);
+    // if (coinData != null && coinData.length > 0) botinfo.coin = parseInt(coinData[1].replace(/,/g, ''))
+    // botinfo.tabUpdateTime = new Date()
 }
+const SBserverRegex = /分流(\d+)/;
+const SBemeraldRegex = /綠寶石.*?(\d+(?:,\d+)*)元/;
+const SBcoinRegex = /村民錠.*?(\d+(?:,\d+)*)個.*?每個.*?(\d+(?:,\d+)*)元/;
+function botScoreBoardhandler(data) {
+    //console.log(data.itemsMap)
+    if (!data?.itemsMap) return;
+    
+    Object.values(data.itemsMap).forEach(item => {
+        //console.log(item)
+        const text = item.displayName?.text || '';
+        
+        const serverMatch = text.match(SBserverRegex);
+        if (serverMatch) {
+            botinfo.server = parseInt(serverMatch[1]);
+        }
 
+        const emeraldMatch = text.match(SBemeraldRegex);
+        if (emeraldMatch) {
+            botinfo.balance = parseInt(emeraldMatch[1].replace(/,/g, ''));
+        }
+
+        const coinMatch = text.match(SBcoinRegex);
+        if (coinMatch) {
+            botinfo.coin = parseInt(coinMatch[1].replace(/,/g, ''));
+        }
+        //console.log(serverMatch,emeraldMatch,coinMatch)
+    });
+    botinfo.tabUpdateTime = new Date();
+}
 async function readConfig(file) {
     var raw_file = await fsp.readFile(file);
     var com_file = await JSON.parse(raw_file);
