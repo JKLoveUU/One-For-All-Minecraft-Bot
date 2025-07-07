@@ -14,6 +14,7 @@ class BotManager {
     this.bots = [];
     this.currentBot = null; // Current selected bot instance
     this.handle = new EventEmitter();
+    this.profiles = this.loadProfiles();
   }
   getBotByName(name) {
     return this.bots.find((bot) => bot.name === name) || null;
@@ -35,7 +36,7 @@ class BotManager {
         child,
         type,
         crtType,
-        config.setting.reconnect_CD,
+        config.setting.reconnect_CD ?? 20_000,
         debug,
         chat
       );
@@ -76,7 +77,7 @@ class BotManager {
       bot.status = status;
     }
   }
-  setBotReloadCD(bot, cd = 10_000) {
+  setBotReloadCD(bot, cd = 10_000) {  //讓child可以再設置parent個別設置自己的重啟cd
     if (bot != null) {
       bot.reloadCD = cd;
     }
@@ -92,7 +93,8 @@ class BotManager {
     }
   }
 
-  // delete the bot from the array
+  // delete the bot from the array 
+  // TODO 任何時候都不應該直接刪除BotInstance 而是以刪除childprocess來達成
   deleteBotInstance(bot) {
     if (bot != null) {
       this.bots = this.bots.filter((b) => b.name !== bot.name);
@@ -107,7 +109,7 @@ class BotManager {
     }
   }
 
-  loadProfiles() {
+  loadProfiles() {  // This shoud only run once
     const profilesPath = path.join(process.cwd(), "profiles.json");
     logger(
       true,
@@ -133,25 +135,28 @@ class BotManager {
       return null;
     }
   }
-
+  /*
+    處理 childP exitCode 實現重啟邏輯
+    處理 childP message 實現重啟邏輯
+  */
   registerBotChildProcessEvent(bot, child) {
     child.on("error", (error) => {
       logger(true, "ERROR", "BOTMANAGER", `${bot.name} error: ${error}`);
     });
-    child.on("exit", (childProcess) => {
+    child.on("exit", (exitCode) => {
       child.removeAllListeners();
       this.setBotChildProcess(bot, null);
-      this.deleteBotInstance(bot);
-      if (childProcess == 0) {
+      //this.deleteBotInstance(bot);
+      if (exitCode == exitcode.OK) {
         logger(true, "INFO", "BOTMANAGER", `${bot.name} closed successfully`);
-      } else if (childProcess >= 2000) {
+      } else if (exitCode >= 2000 || exitCode == exitcode.CONFIG) {  // 通常是設定檔缺失 格式錯誤的
         logger(
           true,
           "ERROR",
           "BOTMANAGER",
-          `${bot.name} closed with err code: ${childProcess}`
+          `${bot.name} closed with err code: ${exitCode}`
         );
-      } else {
+      } else {  //預期中的重啟
         logger(
           true,
           "INFO",
@@ -195,25 +200,26 @@ class BotManager {
       }
     });
   }
-
-  initBot(name) {
+  /*
+    只有在程序開啟 或 手動輸入.create 時執行
+  */
+  initBot(name) { //TODO
     if (this.bots.some((bot) => bot.name === name)) {
       logger(true, "ERROR", "BOTMANAGER", `Bot: ${name} 已經存在`);
       return;
     }
 
-    const profiles = this.loadProfiles();
-    const profile = profiles[name];
+    const profile = this.profiles[name];
 
     if (!profile) {
-      logger(true, "ERROR", "BOTMANAGER", `profiles.js 中無 ${name} 資料`);
+      logger(true, "ERROR", "BOTMANAGER", `profiles 中無 ${name} 資料`);
       return;
     }
 
     const { type, debug, chat } = profile;
 
     if (!type) {
-      logger(true, "ERROR", "BOTMANAGER", `profiles.js 中 ${name} 沒有type資料`);
+      logger(true, "ERROR", "BOTMANAGER", `profiles 中 ${name} 沒有type資料`);
       return;
     }
 
@@ -222,12 +228,18 @@ class BotManager {
       console.log(`Unknown bot type ${type} of ${name}`);
       return null;
     }
-
+    // 這兩項預計這樣配 而非重複
+    // 'auto', 'general'
+    // 'material', 'general'
     const bot = this.getBotInstance(name, null, type, type, !!debug, !!chat);
     this.bots.push(bot);
-    return bot;
+    this.createBot(name);
+    //return bot;
   }
-
+  /*
+    TODO 這邊要改成舊版 6d8b1ac
+    不然打包可能會遺漏這些
+  */
   getBotFilePath(crtType) {
     switch (crtType) {
       case "general":
@@ -240,14 +252,19 @@ class BotManager {
         return;
     }
   }
-
+  // 要改成 只生成cp
   createBot(name) {
-    const bot = this.initBot(name);
-    if (bot == null) return;
+    // const bot = this.initBot(name);
+    // if (bot == null) return;
+    let bot = this.getBotByName(name)
+    if(!bot){
+      logger(true, "ERROR", "BOTMANAGER", `bot ${name} not init...`);
+      return;
+    }
     if (this.currentBot == null) {
       this.currentBot = bot;
     }
-    const botFilePath = this.getBotFilePath(bot.crtType);
+    const botFilePath = this.getBotFilePath(bot.crtType); //TODO
     let args = [name, bot.type];
     if (bot.debug) args.push("--debug");
     if (bot.chat) args.push("--chat");
