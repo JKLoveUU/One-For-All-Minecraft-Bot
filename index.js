@@ -4,6 +4,7 @@ const toml = require("toml-require").install({ toml: require("toml") });
 const config = require(`${process.cwd()}/config.toml`);
 const { logger } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
+const botstatus = require("./src/modules/botstatus.js");
 const {
   DiscordBotStart,
   DiscordBotStop,
@@ -42,7 +43,8 @@ function checkBotValid(bot) {
     return false;
   }
   if (!bot.childProcess) {
-    console.log(`No child process for bot ${bot.name}`);
+    // console.log(`No child process for bot ${bot.name}`);
+    console.log(`${bot.name} is in ${botstatus[bot.status]}, try it later!`);
     return false;
   }
   return true;
@@ -65,7 +67,7 @@ function handleCommand(input) {
         console.log(`Usage: .create <botName>`);
         break;
       }
-      botManager.createBot(args[0]);
+      botManager.initBot(args[0]);
       break;
     case "ff":
       process.exit(0);
@@ -77,26 +79,19 @@ function handleCommand(input) {
       selectedBot = botManager.getCurrentBot();
       if (checkBotValid(selectedBot)) {
         selectedBot.childProcess.send({ type: "exit" });
-        process.title = "[Bot][-1] type .switch to select a bot";
-      }
+        process.title = "[Bot][-] type .switch to select a bot";
+      }//TODO 這邊exit後可能要刪除bot instance 避免無法再次create
       break;
     case "reload":
       selectedBot = botManager.getCurrentBot();
-
       if (checkBotValid(selectedBot)) {
-        // 不確定怎麼送 "reload" 給 child process 卻又能夠將新的 child process 綁到 botInstance 上面
-        // 所以目前先用 "exit" 代替
-        selectedBot.childProcess.send({ type: "exit" });
+        selectedBot.childProcess.send({ type: "reload" });
         logger(
           true,
           "INFO",
           "CONSOLE",
           `Reloading ${selectedBot.name} in ${selectedBot.reloadCD} ms`
         );
-        setTimeout(() => {
-          const newBot = botManager.createBot(selectedBot.name);
-          botManager.setCurrentBotByName(newBot.name);
-        }, selectedBot.reloadCD);
       }
       break;
     case "test":
@@ -104,14 +99,17 @@ function handleCommand(input) {
       break;
     case "switch":
       const botName = args[0];
-      if (typeof botName !== "string") {
-        console.log(`Usage: .switch <botName>`);
-      } else {
-        botManager.setCurrentBotByName(botName);
-        const currentBot = botManager.getCurrentBot();
-        process.title = `[Bot][${currentBot.name}] Use .switch to select a bot`;
-        console.log(`Current bot: ${currentBot.name}.`);
+      let botID = parseInt(botName, 10)
+      ok = false;
+      if(!Number.isNaN(botID)&&botID!=undefined){
+        ok |= botManager.setCurrentBotByID(botID);
+      }else{
+        ok |=  botManager.setCurrentBotByName(botName);
       }
+      if(!ok) console.log(`Usage: .switch <botName or botID>`);
+      const currentBot = botManager.getCurrentBot();
+      process.title = `[Bot][${currentBot.name}] Use .switch to select a bot`;
+      console.log(`Current bot: ${currentBot.name}.`);
       break;
     default:
       selectedBot = botManager.getCurrentBot();
@@ -163,11 +161,12 @@ function main() {
   if(config.discord_setting.activate){
     DiscordBotStart(botManager);
   }
+  //botManager.loadProfiles();
   process.title = "[Bot][-1] type .switch to select a bot";
   let timerdelay = 3005;
   config.account.id.forEach((id) => {
     setTimeout(() => {
-      botManager.createBot(id);
+      botManager.initBot(id); 
       timerdelay += 200;
     }, timerdelay);
   });

@@ -68,9 +68,19 @@ class BotManager {
     const bot = this.getBotByName(name);
     if (bot == null) {
       console.log(`Bot ${name} not found`);
-      return;
+      return false;
     }
     this.currentBot = bot;
+    return true;
+  }
+  setCurrentBotByID(id) {
+    const bot = this.getBotByIndex(id);
+    if (bot == null) {
+      console.log(`Bot ${id} not found`);
+      return false;
+    }
+    this.currentBot = bot;
+    return true;
   }
   setBotStatus(bot, status) {
     if (bot != null) {
