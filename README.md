@@ -12,24 +12,18 @@ Minecraft Bot for McFallout server.
 - [設定](docs/zh_tw/setting.md)
 - [指令](docs/zh_tw/commands.md)
 - [地圖畫](docs/zh_tw/Mapart.md)
-- [兌換](docs/zh_tw/CraftAndExchange.md)
+- ~~[兌換](docs/zh_tw/CraftAndExchange.md)~~ 該功能已被伺服器移除
 
-- [突襲](docs/zh_tw/setting.md) 設定教學
+- ~~ [突襲](docs/zh_tw/setting.md) 設定教學~~ 版本更新後 突襲機制改變
 
 ## Contribute
+- [JKLove](https://github.com/JKLoveUU)
 - [MelonRind](https://github.com/aMelonRind) 目前的bot架構 / 突襲 
 - [CZKKKK](https://github.com/AvaCZK) 撰寫設定教學
+- [bee0511](https://github.com/bee0511) 整理bot代碼
 ## 已知錯誤
 
-[使用體驗不佳 原因未知] 經驗目前 總值 = 等級  等級是不準確的
-
 [網路&DC_API錯誤] Discord Fetch Error 時，會重複發送dc面板
-
-[使用體驗不佳] 還沒init 完成時 使用某些指令會報錯
-
-[不影響] logger send to parent 會有時差 導致訊息順序不易觀看
-
-[不影響] linux 下  exitcode 過大 (>256) 
 
 mapart stop 時 還續繼續蓋下一張 
 
@@ -50,7 +44,6 @@ mapart 補材料時 分流重啟 多耗時很久
 * CMD Console
     1. Identify Command Source (DM / DC / Console)
     and reflect accordingly in the appropriate location
-#### Exchange(ShopItem) 
 
 ### Planing
 * Discord
@@ -62,8 +55,9 @@ mapart 補材料時 分流重啟 多耗時很久
     3. command usage suggest
     4. .help .?
 * MC-Feature
-    1. Clear Area
-    2. ~~Villager Trading~~
+    1. Clear Area 清理區塊
+    2. Quest 自動解廢土任務
+    3. ~~Villager Trading~~ 市面上已經有很多了
 --- 
 ## Develop
 
@@ -84,7 +78,7 @@ mapart 補材料時 分流重啟 多耗時很久
     node_modules\mineflayer\lib\plugins\entities.js
 - keepAlive Emit Error 部分 return
     node_modules\minecraft-protocol\src\client\keepalive.js
-
+- [DEV](docs/dev.md)
 ### 格式
 若有新功能 仿照src/template.js 和 lib/
 
