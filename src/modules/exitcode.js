@@ -2,6 +2,22 @@
  * 這裡一定要改 linux 只支持0-255
  */
 const exitcode = {
+  OK: 0, //手動 預期關閉的
+  USAGE: 64, /* command line usage error */
+  DATAERR: 65,/* data format error */
+  NOINPUT: 66,/* cannot open input */
+  NOUSER: 67,/* addressee unknown */
+  NOHOST: 68, /* host name unknown */
+  UNAVAILABLE: 69, /* service unavailable */
+  SOFTWARE: 70, /* internal software error */
+  OSERR: 71, /* system error (e.g., can't fork) */
+  OSFILE: 72, /* critical OS file missing */
+  CANTCREAT: 73,/* can't create (user) output file */
+  IOERR: 74, /* input/output error */
+  TEMPFAIL: 75,  /* temp failure; user is invited to retry */
+  PROTOCOL: 76, /* remote error in protocol */
+  NOPERM: 77,  /* permission denied */
+  CONFIG: 78,  /* configuration error */
   0: "success",
   1: "general error",
   2: "misuse of shell builtins",
@@ -20,5 +36,8 @@ const exitcode = {
   2002: "config err",
   202: "config err",
 };
+const ec2 = {
+  success: 0,
+}
 
 module.exports = exitcode;
