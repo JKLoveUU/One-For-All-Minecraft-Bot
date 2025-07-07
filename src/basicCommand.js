@@ -44,7 +44,7 @@ const basicCommand = {
             permissionRequre: 0,
         },
         {
-            name: "help",
+            name: "usagetree",
             identifier: [
                 "help",
                 "?",
@@ -231,26 +231,59 @@ const basicCommand = {
     }
 }
 async function cmd_help(task) {
+    // —— 第一部分：列出所有分组命令 —— 
+    const groups = bot.taskManager.commands;
+    groups.forEach((group, gi) => {
+        const isLastGroup = gi === groups.length - 1;
+        const groupBranch = isLastGroup ? '└─' : '├─';
+        // 只打印 identifier，因为 group 没有 .name
+        console.log(`${groupBranch} ${group.identifier}`);
+
+        group.cmd.forEach((sub, si, arr) => {
+            const isLastSub = si === arr.length - 1;
+            // 如果是最后一组，就不再画后续分支
+            const subBranch = isLastGroup
+                ? (isLastSub ? '   └─' : '   ├─')
+                : (isLastSub ? '│  └─' : '│  ├─');
+            // 只有子命令有 .name，就在后面输出
+            console.log(`${subBranch} ${sub.identifier} — ${sub.name}`);
+        });
+    });
+
+    // —— 第二部分：列出 basicCommand —— 
+    const basic = bot.taskManager.basicCommand;
+    const basicBranch = '└─';
+    console.log(`${basicBranch} ${basic.identifier}`);  // basicCommand 本身只有 identifier
+
+    basic.cmd.forEach((cmd, i, arr) => {
+        const isLast = i === arr.length - 1;
+        const cmdBranch = isLast ? '   └─' : '   ├─';
+        console.log(`${cmdBranch} ${cmd.identifier} — ${cmd.name}`);
+    });
+
+
+
+
     // mp ce
-    for (let fc = 0; fc < bot.taskManager.commands.length; fc++) {
-        console.log(bot.taskManager.commands[fc].identifier)
-        //if (bot.taskManager.commands[fc].identifier.includes(args[0])) {
-        for (let cmd_index = 0; cmd_index < bot.taskManager.commands[fc].cmd.length; cmd_index++) {
-           // let args2 = args.slice(1, args.length)[0];
-            console.log(bot.taskManager.commands[fc].cmd[cmd_index].identifier)
-            // if (bot.taskManager.commands[fc].cmd[cmd_index].identifier.includes(args2)) {
-            //   //  result = bot.taskManager.commands[fc].cmd[cmd_index];
-            // }
-        }
-        
-    }
-    //basic
-    for (let cmd_index = 0; cmd_index < bot.taskManager.basicCommand.cmd.length; cmd_index++) {
-        console.log(bot.taskManager.basicCommand.cmd[cmd_index].identifier)
-        // if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
-        //    // result = basicCommand.cmd[cmd_index];
-        // }
-    }
+    // for (let fc = 0; fc < bot.taskManager.commands.length; fc++) {
+    //     console.log(bot.taskManager.commands[fc].identifier)
+    //     //if (bot.taskManager.commands[fc].identifier.includes(args[0])) {
+    //     for (let cmd_index = 0; cmd_index < bot.taskManager.commands[fc].cmd.length; cmd_index++) {
+    //        // let args2 = args.slice(1, args.length)[0];
+    //         console.log(bot.taskManager.commands[fc].cmd[cmd_index].identifier)
+    //         // if (bot.taskManager.commands[fc].cmd[cmd_index].identifier.includes(args2)) {
+    //         //   //  result = bot.taskManager.commands[fc].cmd[cmd_index];
+    //         // }
+    //     }
+
+    // }
+    // //basic
+    // for (let cmd_index = 0; cmd_index < bot.taskManager.basicCommand.cmd.length; cmd_index++) {
+    //     console.log(bot.taskManager.basicCommand.cmd[cmd_index].identifier)
+    //     // if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
+    //     //    // result = basicCommand.cmd[cmd_index];
+    //     // }
+    // }
     await notImplemented(task);
 }
 async function cmd_toServer(task) {
@@ -346,7 +379,7 @@ async function cmd_payall(task) {
         default:
             console.log("限定使用私訊")
             break;
-        }
+    }
 }
 async function cmd_info(task) {
     let binfo = "";
@@ -533,8 +566,8 @@ async function cmd_getTopRaidServers(task) {
                     rej("錯誤menu")
                 }
                 let tt = Date.now()
-                while(wd.slots[9]==null){
-                    if(Date.now()-tt>10000){
+                while (wd.slots[9] == null) {
+                    if (Date.now() - tt > 10000) {
                         rej(" 綠寶石 拾起數量 timeout")
                     }
                     await sleep(50)
@@ -573,7 +606,7 @@ async function cmd_getTopRaidServers(task) {
         console.log(e)
         //console.log("傳送失敗")
     }
-    if (!fail&&tgPlayerList.length>0) {
+    if (!fail && tgPlayerList.length > 0) {
         let playerServer_Result = await mcFallout.getPlayerServer(bot, tgPlayerList);
         for (idx in tgPlayerList) {
             let server = "-";
@@ -589,16 +622,16 @@ async function cmd_getTopRaidServers(task) {
     try { bot.closeWindow(bot.currentWindow) } catch (err) { }
     //  /stats 綠寶石拾起
 }
-async function cmd_click(task){
+async function cmd_click(task) {
     let id = parseInt(task.content[1]);
     console.log(id)
     await bot.simpleClick.leftMouse(id)
 }
-async function cmd_interact(task){
+async function cmd_interact(task) {
     let x = parseInt(task.content[1]);
     let y = parseInt(task.content[2]);
     let z = parseInt(task.content[3]);
-    let p = new Vec3(x,y,z)
+    let p = new Vec3(x, y, z)
     console.log(p)
     bot._client.write('block_place', {
         location: p,
@@ -608,7 +641,7 @@ async function cmd_interact(task){
         cursorY: 0.5,
         cursorZ: 0.5,
         insideBlock: false
-      })
+    })
 }
 async function taskreply(task, mc_msg, console_msg, discord_msg) {
     switch (task.source) {
