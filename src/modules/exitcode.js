@@ -18,6 +18,9 @@ const exitcode = {
   PROTOCOL: 76, /* remote error in protocol */
   NOPERM: 77,  /* permission denied */
   CONFIG: 78,  /* configuration error */
+
+  PSR:10 ,    /* proxy server restarting */
+  
   0: "success",
   1: "general error",
   2: "misuse of shell builtins",

@@ -5,10 +5,10 @@ const botstatus = {
   },
   //  通用區
   0: "Closed", //正常關閉
-  1: "free",
-  2: "in tasking",
-  3: "raid",
-  4: "wait Reload CoolDown",
+  1: "Free",
+  2: "In tasking",
+  3: "Raid",
+  4: "Waiting Reload CoolDown",
   100: "proxy server restarting",
   1000: "Closed(Profile Not Found)",
   1001: "Closed(Type Not Found)",

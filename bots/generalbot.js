@@ -1,5 +1,5 @@
 //console.log(process.argv)
-if (!process.argv[2]) {
+if (!process.argv[2]) { //為了讓打包能加入這個檔案 所以先require
     return
 }
 let debug = process.argv.includes("--debug");
@@ -22,7 +22,6 @@ const registry = require("prismarine-registry")("1.18.2")
 const ChatMessage = require("prismarine-chat")(registry);
 
 const { logger } = require("../src/logger");
-
 // const commandsPath = path.join(__dirname, 'src');
 // const commandFiles = fs.readdirSync(commandsPath)//.filter(file => file.endsWith('.js'));
 // console.log(commandsPath)
@@ -36,13 +35,14 @@ const { logger } = require("../src/logger");
 //     console.log(c)
 //     commands.push(require(filePath))
 // }
-//console.log(commands.length)
+// 因為打包可能遺漏 所以不使用以上方法
 //lib
 //這裡應該改成從lib自動載入 加入commands 並init
-const template = require(`../src/mapart`);
+const template = require(`../src/template`);
 const mapart = require(`../src/mapart`);
+const clearArea = require(`../src/clearArea`);
 const craftAndExchange = require(`../src/craftAndExchange`);
-const commands = [mapart, craftAndExchange, template]
+const commands = [mapart, craftAndExchange, clearArea, template]
 const basicCommand = require(`../src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
@@ -73,7 +73,7 @@ const botinfo = {
     tabUpdateTime: new Date(),
 }
 const bot = (() => { // createMcBot
-    logger(true, 'INFO', process.argv[2], `Initializing | type:${process.argv[3]}`)
+    logger(true, 'INFO', process.argv[2], `Initializing | type: ${process.argv[3]}`)
     const bot = mineflayer.createBot({
         host: profiles[process.argv[2]].host,
         port: profiles[process.argv[2]].port,
@@ -194,7 +194,7 @@ const bot = (() => { // createMcBot
         if (reason.includes("The proxy server is restarting")) {
             process.send({ type: 'setReloadCD', value: 120_000 })
             process.send({ type: 'setStatus', value: 100 })
-            await kill(1003)
+            await kill(10)
         }
         await kill(1000)
     })
@@ -214,14 +214,14 @@ const bot = (() => { // createMcBot
     return bot
 })()
 
-async function kill(code = 1000) {
+async function kill(code = 9) {
     //process.send({ type: 'restartcd', value: restartcd })
     //logger(true, 'WARN', process.argv[2], `exiting in status ${code}`)
     process.send({ type: 'setStatus', value: 4 })
     bot.end()
     process.exit(code)
 }
-
+// 原本要來記錄地圖畫的
 const mapManager = {
     maplist: [],
     init: function () {
@@ -453,7 +453,7 @@ const taskManager = {
     //     this.eventl.emit('commit', task);
     // },
 }
-const serverRegex = /所處位置 : 分流(\d+)-(\S+)/g
+const serverRegex = /分流(\d+)/g
 const emeraldRegex = /綠寶石餘額 : ([\d,]+)/g
 const coinRegex = /村民錠餘額 : ([\d,]+)/g
 
@@ -479,10 +479,10 @@ function botScoreBoardhandler(data) {
         //console.log(item)
         const text = item.displayName?.text || '';
         
-        const serverMatch = text.match(SBserverRegex);
-        if (serverMatch) {
-            botinfo.server = parseInt(serverMatch[1]);
-        }
+        // const serverMatch = text.match(SBserverRegex);
+        // if (serverMatch) {
+        //     botinfo.server = parseInt(serverMatch[1]);
+        // }
 
         const emeraldMatch = text.match(SBemeraldRegex);
         if (emeraldMatch) {
@@ -507,7 +507,7 @@ process.on('uncaughtException', async (err) => {
     logger(true, 'ERROR', process.argv[2], err + "\n" + err.stack);
     //console.log(err)
     //if (login) try{await taskManager.save()}catch(e){};
-    kill(1000)
+    kill(70)
 });
 process.on('message', async (message) => {
     switch (message.type) {
@@ -540,15 +540,14 @@ process.on('message', async (message) => {
         case 'chat':
             try {
                 bot.chat(message.text)
-                console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
+                console.log(`訊息已由 ${bot.username} 送出: ${message.text}`);
             } catch (e) {
                 logger(false, "ERROR", process.argv[2], "訊息發送失敗 try again")
             }
-
             break;
         case 'reload':
             process.send({ type: 'setStatus', value: 3002 })
-            await kill(1002)
+            await kill(75)
             break;
         case 'exit':
             process.send({ type: 'setStatus', value: 0 })
