@@ -45,12 +45,15 @@ class BotManager {
   printBotList() {
     const typeLength = 7;
     const crtTypeLength = 7;
-
+    const longestBotLength =  this.bots.reduce((longest, a) => {
+      return a.name.length > longest ? a.name.length : longest;
+    }, 0);
+    const longestStatusLength =  14
     console.log(`Total ${this.getBotNums()} bots`);
-    console.log(`Id | Bot | Status | Type | CrtType`);
+    console.log(`Id`.padEnd((parseInt(this.bots.length / 10)) + 2)+' | '+ (`Bot`.padEnd(longestBotLength)) +' | '+(`Status`.padEnd(longestStatusLength))+  ' | Type    | CrtType')
     this.bots.forEach((bot, i) => {
       console.log(
-        `${i} | ${bot.name} | ${botstatus[bot.status]} | ${
+        `${i}  | ${bot.name.padEnd(longestBotLength)} | ${botstatus[bot.status].padEnd(longestStatusLength)} | ${
           bot.type ? bot.type.padEnd(typeLength) : "-".padEnd(typeLength)
         } | ${
           bot.crtType
