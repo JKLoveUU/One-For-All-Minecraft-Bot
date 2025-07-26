@@ -2,6 +2,10 @@ const readline = require("readline");
 const fs = require("fs");
 const toml = require("toml-require").install({ toml: require("toml") });
 const config = require(`${process.cwd()}/config.toml`);
+// mc 不知道為甚麼不require打包就會漏掉了
+//const rq_general = require(`./bots/generalbot.js`)
+// const rq_raid = require(`./bots/raidbot.js`)
+// const rq_logger = require("./src/logger");
 const { logger } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
 const botstatus = require("./src/modules/botstatus.js");
@@ -22,6 +26,7 @@ const rl = readline.createInterface({
       ".exit",
       ".reload",
       ".ff",
+      ".all",
     ];
     const hits = completions.filter((cmd) => cmd.startsWith(line));
     return [hits.length ? hits : completions, line];
@@ -67,7 +72,12 @@ function handleCommand(input) {
         console.log(`Usage: .create <botName>`);
         break;
       }
-      botManager.initBot(args[0]);
+      checkbot = botManager.getBotByName(args[0])
+      if (checkbot) {
+        botManager.createBot(checkbot.name)
+      } else {
+        botManager.initBot(args[0]);
+      }
       break;
     case "ff":
       process.exit(0);
@@ -101,15 +111,20 @@ function handleCommand(input) {
       const botName = args[0];
       let botID = parseInt(botName, 10)
       ok = false;
-      if(!Number.isNaN(botID)&&botID!=undefined){
+      if (!Number.isNaN(botID) && botID != undefined) {
         ok |= botManager.setCurrentBotByID(botID);
-      }else{
-        ok |=  botManager.setCurrentBotByName(botName);
+      } else {
+        ok |= botManager.setCurrentBotByName(botName);
       }
-      if(!ok) console.log(`Usage: .switch <botName or botID>`);
+      if (!ok) console.log(`Usage: .switch <botName or botID>`);
       const currentBot = botManager.getCurrentBot();
       process.title = `[Bot][${currentBot.name}] Use .switch to select a bot`;
       console.log(`Current bot: ${currentBot.name}.`);
+      break;
+    case "all":
+      botManager.bots.forEach((bot, i) => {
+        if(bot.childProcess) bot.childProcess.send({ type: "cmd", text: input.slice(5, input.length) });
+      })
       break;
     default:
       selectedBot = botManager.getCurrentBot();
@@ -141,7 +156,7 @@ async function handleClose() {
   logger(true, "INFO", "CONSOLE", "Closing application...");
   botManager.stop();
   const waitingTime = 1000 + botManager.getBotNums() * 200;
-  if(config.discord_setting.activate){
+  if (config.discord_setting.activate) {
     await DiscordBotStop(waitingTime);
   }
   logger(true, "INFO", "CONSOLE", "Close finished");
@@ -158,7 +173,7 @@ function main() {
   );
   addMainProcessEventHandler();
   addConsoleEventHandler();
-  if(config.discord_setting.activate){
+  if (config.discord_setting.activate) {
     DiscordBotStart(botManager);
   }
   //botManager.loadProfiles();
@@ -166,7 +181,7 @@ function main() {
   let timerdelay = 3005;
   config.account.id.forEach((id) => {
     setTimeout(() => {
-      botManager.initBot(id); 
+      botManager.initBot(id);
       timerdelay += 200;
     }, timerdelay);
   });

@@ -21,7 +21,6 @@ const CNTA = require('chinese-numbers-to-arabic');
 const registry = require("prismarine-registry")("1.18.2")
 const ChatMessage = require("prismarine-chat")(registry);
 
-const { logger } = require("../src/logger");
 // const commandsPath = path.join(__dirname, 'src');
 // const commandFiles = fs.readdirSync(commandsPath)//.filter(file => file.endsWith('.js'));
 // console.log(commandsPath)
@@ -40,9 +39,11 @@ const { logger } = require("../src/logger");
 //這裡應該改成從lib自動載入 加入commands 並init
 const template = require(`../src/template`);
 const mapart = require(`../src/mapart`);
-const clearArea = require(`../src/clearArea`);
+// const clearArea = require(`../src/clearArea`);
+// const autoQuest = require(`../src/autoQuest`);
 const craftAndExchange = require(`../src/craftAndExchange`);
-const commands = [mapart, craftAndExchange, clearArea, template]
+const { logger } = require("../src/logger");
+const commands = [mapart, craftAndExchange, template] // clearArea, autoQuest,
 const basicCommand = require(`../src/basicCommand`)
 if (!profiles[process.argv[2]]) {
     //已經在parent檢查過了 這邊沒有必要
@@ -94,6 +95,13 @@ const bot = (() => { // createMcBot
     }
     bot.once('spawn', async () => {
         logger(true, 'INFO', process.argv[2], `login as ${bot.username}`)
+        bot._client.write("abilities", {
+            flags: 0b0111,
+            flyingSpeed: 4.0,
+            walkingSpeed: 4.0
+        })
+        bot.entity.onGround = false;
+        bot.creative.flyTo(bot.entity.position.offset(0, 0.01, 0))
         bot.logger = logger
         bot.gkill = kill;
         bot.botinfo = botinfo;
@@ -151,6 +159,7 @@ const bot = (() => { // createMcBot
             // console.log(taskManager.isImm(cmds))
         } else {
             bot.chat(`/m ${playerID} 無效的指令 輸入 help 查看幫助 若要轉發消息使用 say <text>`)
+            enableChat = !enableChat
         }
         //console.log(jsonMsg.toString())
         logger(true, 'CHAT', process.argv[2], jsonMsg.toString())
@@ -203,12 +212,13 @@ const bot = (() => { // createMcBot
     })
     bot.once('end', async () => {
         logger(true, 'WARN', process.argv[2], `${process.argv[2]} disconnect`)
+        await sleep(1000)
         await kill(1000)
     })
     bot.once('wait', async () => {
         process.send({ type: 'setReloadCD', value: 120_000 })
         logger(true, 'INFO', process.argv[2], `was sent to waiting room`)
-        await kill(1001)
+        await kill(11)
     })
     //init()
     return bot
@@ -217,7 +227,6 @@ const bot = (() => { // createMcBot
 async function kill(code = 9) {
     //process.send({ type: 'restartcd', value: restartcd })
     //logger(true, 'WARN', process.argv[2], `exiting in status ${code}`)
-    process.send({ type: 'setStatus', value: 4 })
     bot.end()
     process.exit(code)
 }
@@ -365,7 +374,6 @@ const taskManager = {
         //return false
     },
     async execute(task) {
-        logger(true, 'INFO', process.argv[2], `execute task ${task.displayName}`) //\n${task.content}
         let args = task.content
         //console.log(task)
         if (task.source == 'console') task.console = logger;
@@ -391,13 +399,14 @@ const taskManager = {
                 }
             }
         }
+        logger(true, 'INFO', process.argv[2], `execute task ${task.displayName}`) //\n${task.content}
         if (result.vaild != true) {
             console.log(task)
             logger(true, 'ERROR', process.argv[2], `task ${task.displayName} not found`)
             return
         }
         await result.execute(task)
-        logger(true, 'INFO', process.argv[2], `任務 ${task.displayName} \x1b[32mcompleted\x1b[0m`)
+        if(result.longRunning) logger(true, 'INFO', process.argv[2], `任務 ${task.displayName} \x1b[32mcompleted\x1b[0m`)
     },
     async assign(task, longRunning = true) {
         if (longRunning) {
@@ -474,11 +483,11 @@ const SBcoinRegex = /村民錠.*?(\d+(?:,\d+)*)個.*?每個.*?(\d+(?:,\d+)*)元/
 function botScoreBoardhandler(data) {
     //console.log(data.itemsMap)
     if (!data?.itemsMap) return;
-    
+
     Object.values(data.itemsMap).forEach(item => {
         //console.log(item)
         const text = item.displayName?.text || '';
-        
+
         // const serverMatch = text.match(SBserverRegex);
         // if (serverMatch) {
         //     botinfo.server = parseInt(serverMatch[1]);

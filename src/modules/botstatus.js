@@ -9,6 +9,7 @@ const botstatus = {
   2: "In tasking",
   3: "Raid",
   4: "Waiting Reload CoolDown",
+  12: "Wait Next Quest",
   100: "proxy server restarting",
   1000: "Closed(Profile Not Found)",
   1001: "Closed(Type Not Found)",
@@ -26,6 +27,8 @@ const botstatus = {
   3200: "Running",
   3201: "Running(Idle)",
   3202: "Running(Tasking)",
+  3210: "Questing(Handling)",
+  3211: "Questing(Wait Next)",
 
   //    process.send({ type: 'setStatus', value: 1000 })
 };

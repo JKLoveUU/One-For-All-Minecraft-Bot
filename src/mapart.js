@@ -363,7 +363,7 @@ async function mp_set(task) {
     mapart_set_cache.schematic.placementPoint_x = parseInt(task.content[3])
     mapart_set_cache.schematic.placementPoint_y = parseInt(task.content[4])
     mapart_set_cache.schematic.placementPoint_z = parseInt(task.content[5])
-    if (Math.abs(mapart_set_cache.schematic.placementPoint_x + 64) % 128 != 0) {
+    if (Math.abs(mapart_set_cache.schematic.placementPoint_x + 64) % 128 != 0 && task.content[6]!='-f') {
         await taskreply(task,
             `&7[&bMP&7] &cX座標可能錯了`,
             `X座標可能錯了`,
@@ -465,14 +465,14 @@ async function mp_build(task) {
         return
     }
     
-    csafe_success = false
-    bot.chat('/csafe')
-    bot.on('messagestr', csafe)
-    while (!csafe_success) {
-        await bot.waitForTicks(30)
-        bot.chat('/csafe')
-    }
-    bot.off('messagestr', csafe)
+    // csafe_success = false
+    // bot.chat('/csafe')
+    // bot.on('messagestr', csafe)
+    // while (!csafe_success) {
+    //     await bot.waitForTicks(30)
+    //     bot.chat('/csafe')
+    // }
+    // bot.off('messagestr', csafe)
     
     //try {
     await litematicPrinter.build_file(task, bot, litematicPrinter.model_mapart, mapart_build_cfg_cache)

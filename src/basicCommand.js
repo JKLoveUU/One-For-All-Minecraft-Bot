@@ -24,6 +24,16 @@ const basicCommand = {
             permissionRequre: 0,
         },
         {
+            name: "task list",
+            identifier: [
+                "tl"
+            ],
+            execute: cmd_tasklist,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {
             name: "interact",
             identifier: [
                 "interact"
@@ -144,6 +154,16 @@ const basicCommand = {
                 "throw",
             ],
             execute: cmd_throw,
+            vaild: true,
+            longRunning: true,
+            permissionRequre: 0,
+        },
+                {
+            name: "丟垃圾",
+            identifier: [
+                "qt",
+            ],
+            execute: cmd_qthrow,
             vaild: true,
             longRunning: true,
             permissionRequre: 0,
@@ -473,6 +493,9 @@ async function cmd_expinfo(task) {
     }
 
 }
+async function cmd_tasklist(task) {
+    console.log(bot.taskManager.tasks)
+}
 async function cmd_throw(task) {
     let targetIndexs = task.content.slice(1).map((str) => parseInt(str))
     if (targetIndexs.length == 0) {
@@ -480,28 +503,19 @@ async function cmd_throw(task) {
         return
     }
     for (let i = 0; i < targetIndexs.length; i++) {
-        await throw_slot(targetIndexs[i])
+        await containerOperation.throw_slot(bot,targetIndexs[i])
+    }
+}
+async function cmd_qthrow(task) {
+    let throw_whitelist = ["netherite_shovel","netherite_pickaxe","netherite_axe","netherite_sword","netherite_hoe","fishing_rod"]
+    for (let i = 9; i <= 45; i++) {
+        c = bot.inventory.slots[i]
+        if(c && !throw_whitelist.includes(bot.inventory.slots[i].name)) await containerOperation.throw_slot(bot,i)
     }
 }
 async function cmd_throwall(task) {
     for (let i = 9; i <= 45; i++) {
-        await throw_slot(i)
-    }
-}
-async function throw_slot(slot) {
-    //5-8 armor 
-    //9-44 inv
-    //45 second-hand
-    if (slot < 5 || slot > 45) return;
-    if (bot.currentWindow) {
-        console.log(bot.currentWindow?.title ?? 'Inventory');
-        console.log("嘗試關閉當前視窗")
-        bot.closeWindow(bot.currentWindow)
-    }
-    if (bot.inventory.slots[slot] != null) {
-        logger(true, 'INFO', process.argv[2], `丟棄 slot: ${slot} - ${bot.inventory.slots[slot].name} x${bot.inventory.slots[slot].count}`)
-        bot.tossStack(bot.inventory.slots[slot])
-        await sleep(50);
+    await containerOperation.throw_slot(bot,i)
     }
 }
 async function cmd_exit(task) {

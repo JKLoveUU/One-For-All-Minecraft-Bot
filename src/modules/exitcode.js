@@ -3,6 +3,11 @@
  */
 const exitcode = {
   OK: 0, //手動 預期關閉的
+
+  PSR:10 ,    /* proxy server restarting */
+  SERVER_RELOAD: 11,
+  CUSTOM_QUEST_WAITING: 12,
+  
   USAGE: 64, /* command line usage error */
   DATAERR: 65,/* data format error */
   NOINPUT: 66,/* cannot open input */
@@ -19,7 +24,7 @@ const exitcode = {
   NOPERM: 77,  /* permission denied */
   CONFIG: 78,  /* configuration error */
 
-  PSR:10 ,    /* proxy server restarting */
+
   
   0: "success",
   1: "general error",
