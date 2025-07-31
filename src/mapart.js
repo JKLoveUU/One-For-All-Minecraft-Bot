@@ -301,16 +301,16 @@ const mapart = {
             save(mapart_cfg)
         } else {
             //bot.logger(true,"INFO",process.argv[2],`加載個別Bot地圖畫設定資訊...`)
-            try{
+            try {
                 mapart_cfg = await readConfig(`${process.cwd()}/config/${bot_id}/mapart.json`)
-            }catch(e){
-                bot.logger(true,"ERROR",process.argv[2],`個別Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/${bot_id}/mapart.json`)
+            } catch (e) {
+                bot.logger(true, "ERROR", process.argv[2], `個別Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/${bot_id}/mapart.json`)
                 await sleep(1000)
                 console.log("Please Check The Json Format")
                 console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
                 console.log("You can visit following websites the fix: ")
                 console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
-                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ","+")}\x1b[0m`)
+                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ", "+")}\x1b[0m`)
                 bot.gkill(202)
             }
         }
@@ -321,16 +321,16 @@ const mapart = {
                 if (err) console.log('mapart save error', err);
             });
         } else {
-            try{
+            try {
                 mapart_global_cfg = await readConfig(`${process.cwd()}/config/global/mapart.json`)
-            }catch(e){
-                bot.logger(true,"ERROR",process.argv[2], `全Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/global/mapart.json`)
+            } catch (e) {
+                bot.logger(true, "ERROR", process.argv[2], `全Bot地圖畫設定資訊載入失敗\nFilePath: ${process.cwd()}/config/global/mapart.json`)
                 await sleep(1000)
                 console.log("Please Check The Json Format")
                 console.log(`Error Msg: \x1b[31m${e.message}\x1b[0m`)
                 console.log("You can visit following websites the fix: ")
                 console.log(`\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`)
-                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ","+")}\x1b[0m`)
+                console.log(`\x1b[33mhttps://www.google.com/search?q=${(e.message).replaceAll(" ", "+")}\x1b[0m`)
                 bot.gkill(202)
             }
         }
@@ -345,8 +345,8 @@ async function mp_debug(task) {
         if (!mp[n]) mp[n] = c;
         else mp[n] += c
     }
-    for(const i in mp){
-        console.log(i.toString().padEnd(16),mp[i])
+    for (const i in mp) {
+        console.log(i.toString().padEnd(16), mp[i])
     }
 }
 async function mp_set(task) {
@@ -363,7 +363,7 @@ async function mp_set(task) {
     mapart_set_cache.schematic.placementPoint_x = parseInt(task.content[3])
     mapart_set_cache.schematic.placementPoint_y = parseInt(task.content[4])
     mapart_set_cache.schematic.placementPoint_z = parseInt(task.content[5])
-    if (Math.abs(mapart_set_cache.schematic.placementPoint_x + 64) % 128 != 0 && task.content[6]!='-f') {
+    if (Math.abs(mapart_set_cache.schematic.placementPoint_x + 64) % 128 != 0 && task.content[6] != '-f') {
         await taskreply(task,
             `&7[&bMP&7] &cX座標可能錯了`,
             `X座標可能錯了`,
@@ -464,7 +464,7 @@ async function mp_build(task) {
         console.log(`&7${mapart_build_cfg_cache.server} TAB 分流讀取失敗 請重試`)
         return
     }
-    
+
     // csafe_success = false
     // bot.chat('/csafe')
     // bot.on('messagestr', csafe)
@@ -473,11 +473,11 @@ async function mp_build(task) {
     //     bot.chat('/csafe')
     // }
     // bot.off('messagestr', csafe)
-    
+
     //try {
     await litematicPrinter.build_file(task, bot, litematicPrinter.model_mapart, mapart_build_cfg_cache)
 
-    
+
     //let pq = await litematicPrinter.progress_query(task, bot)
     //console.log(pq)
     // send analysis
@@ -511,7 +511,7 @@ async function mp_build(task) {
             embeds: [mapartfinishEmbed]
         };
         if (bot.debugMode) {
-            let inv ='```'
+            let inv = '```'
             let mp = {};
             for (let i = bot.inventory.inventoryStart; i <= bot.inventory.inventoryEnd; i++) {
                 if (bot.inventory.slots[i] == null) continue
@@ -520,11 +520,11 @@ async function mp_build(task) {
                 if (!mp[n]) mp[n] = c;
                 else mp[n] += c
             }
-            for(const i in mp){
+            for (const i in mp) {
                 inv += `${i.toString().padEnd(16)} ${mp[i]}\n`
                 //console.log(i.toString().padEnd(16),mp[i])
             }
-            inv+='```'
+            inv += '```'
             wh.embeds.push({
                 color: 0x0099ff,
                 title: `除錯資料`,
@@ -701,7 +701,7 @@ async function mp_build(task) {
             csafe_success = true
         }
     }
-    
+
     function gen_mapartFinishEmbed() {
         let iconurl = `https://mc-heads.net/avatar/${bot.username}`
         let mapartfinishEmbed = {
@@ -822,7 +822,7 @@ async function mp_open(task) {
     }
     console.log(mapart_open_cfg_cache["open"])
     await mcFallout.warp(bot, mapart_open_cfg_cache["open"]["warp"])
-    await bot.chat("/sethome mapart")
+    await mcFallout.sethome(bot, 'mapart')
     await sleep(1000)
     bot.setQuickBarSlot(8);
     await bot.creative.flyTo(bot.entity.position.offset(0, 0.01, 0))
@@ -973,7 +973,7 @@ async function mp_open(task) {
         await inv_sort()
         if (mpstate[i].finish || mpstate[i].skip) continue
         if (getEmptySlot().length == 0) {
-            await bot.chat("/sethome mapart")
+            await mcFallout.sethome(bot, 'mapart')
             await sleep(200)
             await mcFallout.warp(bot, mapart_open_cfg_cache["open"]["warp"])
             await sleep(500)
@@ -1014,7 +1014,7 @@ async function mp_open(task) {
         }
         console.log(`open At ${mps.mapartRealPos}`)
         await sleep(500)
-        await bot.chat("/sethome mapart")
+        await mcFallout.sethome(bot, 'mapart')
         await bot.simpleClick.leftMouse(43)
         await bot.simpleClick.rightMouse(44)
         await bot.simpleClick.leftMouse(43)
@@ -1334,7 +1334,7 @@ async function mp_material(task) {
 
 
         for (x; x >= (+task.content[7]); x--) {
-            for (let i = y - 5; i >= -64 ; i--) {
+            for (let i = y - 5; i >= -64; i--) {
                 block = await bot.world.getBlock(new Vec3(x, i, z))
                 if (block.name === ('air' || 'cave_air' || 'bedrock')) {
                     break
@@ -1343,12 +1343,12 @@ async function mp_material(task) {
                 console.log(materialsPush)
                 Materialsdata.materials.push(materialsPush);
             }
-            
+
 
         }
     }
 
-    
+
 
 
     await taskreply(task,
