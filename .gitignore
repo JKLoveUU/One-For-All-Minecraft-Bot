@@ -9,3 +9,5 @@ test/
 raid/
 config/
 package-lock.json
+config.toml
+profile.json
