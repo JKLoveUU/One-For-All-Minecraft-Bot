@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "rb": "pkg -t node18-win-x64 index.js -o release-pre/pre.exe",
-    "b": "pkg -t node18-win-x64 index.js -o test/abc.exe",
-    "b_linux": "pkg -t node18-linux index.js -o raid/raid",
+    "tb": "pkg -t node18-win-x64 index.js -o test/tb.exe",
+    "rpb": "pkg -t node18-win-x64 index.js -o release-pre/pre.exe",
+    "rb": "pkg -t node18-win-x64 index.js -o release/ofa.exe",
+    "b_linux": "pkg -t node18-linux index.js -o ofal/ofa_linux",
     "bd": "pkg -t node18-win-x64 index.js -o test/abc.exe --debug"
   },
   "repository": {
@@ -16,13 +17,22 @@
   },
   "files": [
     "index.js",
-    "generalbot.js",
-    "./lib"
+    "./bots",
+    "./lib",
+    "./src"
   ],
   "pkg": {
     "assets": [
-      "generalbot.js",
-      "lib/**"
+    ],
+    "scripts": [
+      "src/modules/botmanager.js",
+      "bots/generalbot.js",
+      "index.js",
+      "bots/*.js",
+      "lib/**/*.js",
+      "lib/*.js",
+      "src/**/*.js",
+      "src/*.js"
     ]
   },
   "author": "JKLove",
