@@ -6,6 +6,7 @@ class BotInstance {
     this.status = 0;
     this.type = type;
     this.crtType = crtType;
+    this.reloadCancel = null;
     this.reloadCD = reloadCD;
     this.debug = !!debug;
     this.chat = !!chat;

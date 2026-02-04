@@ -8,8 +8,13 @@ const { exit } = require("process");
 const exitcode = require("./exitcode");
 const botstatus = require("./botstatus");
 const { log } = require("console");
+const net = require("net");
+// mc 不知道為甚麼不require打包就會漏掉了
+const rq_general = require('../../bots/generalbot.js');
+const rq_raid    = require('../../bots/raidbot.js');
 
 class BotManager {
+  _bestIP = null;
   constructor() {
     this.bots = [];
     this.currentBot = null; // Current selected bot instance
@@ -49,12 +54,12 @@ class BotManager {
     const longestBotLength =  this.bots.reduce((longest, a) => {
       return a.name.length > longest ? a.name.length : longest;
     }, 0);
-    const longestStatusLength =  14
+    const longestStatusLength =  24
     console.log(`Total ${this.getBotNums()} bots`);
     console.log(`Id`.padEnd((parseInt(this.bots.length / 10)) + 2)+' | '+ (`Bot`.padEnd(longestBotLength)) +' | '+(`Status`.padEnd(longestStatusLength))+  ' | Type    | CrtType')
     this.bots.forEach((bot, i) => {
       console.log(
-        `${i}  | ${bot.name.padEnd(longestBotLength)} | ${botstatus[bot.status].padEnd(longestStatusLength)} | ${
+        `${i}  | ${bot.name.padEnd(longestBotLength)} | ${botstatus[bot.status] ? botstatus[bot.status].padEnd(longestStatusLength):bot.status} | ${
           bot.type ? bot.type.padEnd(typeLength) : "-".padEnd(typeLength)
         } | ${
           bot.crtType
@@ -155,6 +160,10 @@ class BotManager {
     });
     child.on("exit", (exitCode) => {
       child.removeAllListeners();
+      if (bot.reloadCancel) { // 取消其他重啟
+        clearTimeout(bot.reloadCancel);
+        bot.reloadCancel = null;
+      }
       this.setBotChildProcess(bot, null);
       //this.deleteBotInstance(bot);
       if (exitCode == exitcode.OK) {
@@ -173,9 +182,10 @@ class BotManager {
           "BOTMANAGER",
           `${bot.name} restart in ${bot.reloadCD / 1000} second`
         );
-        setTimeout(
+        bot.reloadCancel = setTimeout(
           () => {
             this.createBot(bot.name);
+            bot.reloadCancel = null;
           },
           bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD
         );
@@ -253,9 +263,9 @@ class BotManager {
   getBotFilePath(crtType) {
     switch (crtType) {
       case "general":
-        return `${process.cwd()}/bots/generalbot.js`;
+        return path.join(__dirname, "../../bots/generalbot.js");
       case "raid":
-        return `${process.cwd()}/bots/raidbot.js`;
+        return path.join(__dirname, "../../bots/raidbot.js");
       default:
         logger(true, "ERROR", "BOTMANAGER", `Invalid crtType: ${crtType}`);
         exit(1000);
@@ -278,6 +288,7 @@ class BotManager {
     let args = [name, bot.type];
     if (bot.debug) args.push("--debug");
     if (bot.chat) args.push("--chat");
+    if (config.setting.selectBestIP) args.push(`--ip=${this._bestIP}`);
     const child = fork(botFilePath, args);
     this.setBotChildProcess(bot, child);
     this.registerBotChildProcessEvent(bot, child);
@@ -301,6 +312,7 @@ class BotManager {
       position: data.position,
       tasks: data.tasks,
       runingTask: data.runingTask,
+      ping: data.ping,
     };
     return botinfo;
   }
@@ -321,6 +333,105 @@ class BotManager {
       });
       bot.childProcess.send({ type: "dataRequire" });
     });
+  }
+  /**
+   * 測試單個服務器節點的連接延遲
+   */
+  async pingHost(host, port = 25565, timeout = 3000) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      
+      let targetHost = host;
+      if (host === "mcfallout.net") {
+        targetHost = "proxy-net.mcfallout.net";
+      }
+      
+      const socket = new net.Socket();
+      
+      const timeoutId = setTimeout(() => {
+        socket.destroy();
+        resolve({
+          host: host,
+          latency: Date.now() - startTime,
+          status: "timeout",
+          error: "Connection timeout"
+        });
+      }, timeout);
+      
+      socket.connect(port, targetHost, () => {
+        clearTimeout(timeoutId);
+        const latency = Date.now() - startTime;
+        socket.destroy();
+        resolve({
+          host: host,
+          latency: latency,
+          status: "online",
+          error: null
+        });
+      });
+      
+      socket.on('error', (error) => {
+        clearTimeout(timeoutId);
+        resolve({
+          host: host,
+          latency: Date.now() - startTime,
+          status: "offline",
+          error: error.message
+        });
+      });
+    });
+  }
+
+  /**
+   * 並行測試多個服務器節點
+   */
+  async pingHosts(hosts) {
+    const pingPromises = hosts.map(host => this.pingHost(host));
+    const results = await Promise.all(pingPromises);
+    // console.log(results);
+    const online = results.filter(r => r.status === "online");
+    const best = online.length > 0 
+      ? online.reduce((best, current) => current.latency <= best.latency ? current : best)
+      : null;
+    
+    return {
+      results: results,
+      best: best,
+      online: online.length,
+      offline: results.length - online.length
+    };
+  }
+
+  /**
+   * 找出最佳的服務器 IP
+   */
+  async findBestIP() {
+    if (!config.setting.selectBestIP || !config.setting.ips || config.setting.ips.length === 0) {
+      return null;
+    }
+    
+    try {
+      const pingData = await this.pingHosts(config.setting.ips);
+      
+      if (pingData.best) {
+        return pingData.best.host;
+        // this._bestIP = pingData.best.host;
+        // return this._bestIP;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async updateBestIP() {
+    if (config.setting.selectBestIP){
+      let bestipresult = await this.findBestIP();
+      logger(true, "INFO", "BOTMANAGER", `最佳 IP: ${bestipresult}`);
+      if (bestipresult) {
+        this._bestIP = bestipresult;
+      }
+    }
   }
 }
 

@@ -3,7 +3,7 @@ const fs = require("fs");
 const toml = require("toml-require").install({ toml: require("toml") });
 const config = require(`${process.cwd()}/config.toml`);
 // mc 不知道為甚麼不require打包就會漏掉了
-//const rq_general = require(`./bots/generalbot.js`)
+const rq_general = require(`./bots/generalbot.js`)
 // const rq_raid = require(`./bots/raidbot.js`)
 // const rq_logger = require("./src/logger");
 const { logger } = require("./src/logger");
@@ -67,8 +67,22 @@ function handleCommand(input) {
   const [command, ...args] = input.trim().split(/\s+/);
   const cmd = command.substring(1);
   switch (cmd) {
+    case "c":
     case "create":
-      if (typeof args[0] !== "string") {
+      // 如果沒有 args[0]，則檢查目前選擇的 bot 是否有 childProcess
+      if (!args[0]) {
+        const curBot = botManager.getCurrentBot();
+        if (!curBot) {
+          console.log("尚未選擇機器人，請先使用 .switch 選擇一個機器人。");
+          break;
+        }
+        if (curBot.childProcess) {
+          console.log(`目前選擇的機器人 ${curBot.name} 已經在執行中。`);
+          break;
+        }
+        botManager.createBot(curBot.name);
+        break;
+      } else if (typeof args[0] !== "string") {
         console.log(`Usage: .create <botName>`);
         break;
       }
@@ -90,7 +104,11 @@ function handleCommand(input) {
       if (checkBotValid(selectedBot)) {
         selectedBot.childProcess.send({ type: "exit" });
         process.title = "[Bot][-] type .switch to select a bot";
-      }//TODO 這邊exit後可能要刪除bot instance 避免無法再次create
+      } else if (selectedBot.reloadCancel) {
+        logger(true, "INFO", "CONSOLE", `取消 ${selectedBot.name} 的重啟`);
+        clearTimeout(selectedBot.reloadCancel);
+        selectedBot.reloadCancel = null;
+      }
       break;
     case "reload":
       selectedBot = botManager.getCurrentBot();
@@ -176,6 +194,10 @@ function main() {
   if (config.discord_setting.activate) {
     DiscordBotStart(botManager);
   }
+  botManager.updateBestIP();
+  setInterval(() => {
+    botManager.updateBestIP();
+  }, 1000 * 60 * 5);
   //botManager.loadProfiles();
   process.title = "[Bot][-1] type .switch to select a bot";
   let timerdelay = 3005;

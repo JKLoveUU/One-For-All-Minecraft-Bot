@@ -32,6 +32,7 @@ const exitcode = {
   1000: "unknown error",
   1001: "server reload",
   1002: "client reload",
+  1003: "login timeout",
   1402: "raid (keepalive)",
   1003: "proxy server restarting",
   1004: "client error reload",
