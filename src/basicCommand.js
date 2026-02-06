@@ -221,15 +221,26 @@ const basicCommand = {
             permissionRequre: 0,
         },
         {
-            name: "統計 綠寶石拾起榜 分流",
+            name: "統計 村民交易 分流",
             identifier: [
-                "raidrank",
-                "topraid",
-                "raidtop"
+                "vtrank",
+                "vttop",
+                "emrank",
+                "emtop"
             ],
             execute: cmd_getTopRaidServers,
             vaild: true,
             longRunning: true,
+            permissionRequre: 0,
+        },
+        {
+            name: "goto",
+            identifier: [
+                "goto",
+            ],
+            execute: cmd_goto,
+            vaild: true,
+            longRunning: false,
             permissionRequre: 0,
         },
         {
@@ -249,6 +260,13 @@ const basicCommand = {
         bot = bott
         mcData = require('minecraft-data')(bot.version)
     }
+}
+async function cmd_goto(task) {
+    let x = parseInt(task.content[1])
+    let y = parseInt(task.content[2])
+    let z = parseInt(task.content[3])
+    let target = new Vec3(x,y,z)
+    await pathfinder.astarfly(bot,target)
 }
 async function cmd_help(task) {
     // —— 第一部分：列出所有分组命令 —— 
@@ -304,23 +322,19 @@ async function cmd_help(task) {
     //     //    // result = basicCommand.cmd[cmd_index];
     //     // }
     // }
-    await notImplemented(task);
+    // await notImplemented(task);
 }
 async function cmd_toServer(task) {
-    await notImplemented(task);
+    let ss = task.content[1]
+    if(!ss){
+        console.log("未輸入分流")
+    }
+    let s = 1
+    s = parseInt(ss)
+    await mcFallout.teleportServer(bot,s)
 }
 async function cmd_test(task) {
-    const crypto = require('crypto');
-    for (let i = 0; i < 100; i++) {
-        //const str = JSON.stringify(i);
-        //const hash = crypto.createHash('sha256').update(str).digest('hex');
-        //bot.chatManager.chat(hash)
-        bot.chatManager.chat(i + " rate limit test")
-    }
 
-    //let result = await bot.tabComplete('/tpa ')
-    //console.log(result)
-    // mcFallout.tpc(bot,"JKLoveJK",1)
 }
 async function cmd_TheRumbling(task) {
     let lang = task.content[1] ? task.content[1] : "ch";
@@ -402,6 +416,7 @@ async function cmd_payall(task) {
     }
 }
 async function cmd_info(task) {
+    // await containerOperation.updateInventory(bot)
     let binfo = "";
     let currentPostion = bot.entity.position;
     let expLevel = bot.experience.level
@@ -568,7 +583,7 @@ async function cmd_getTopRaidServers(task) {
                 fail = true;
                 rej()
             }, 15_000)
-            bot.chat(`/stats 綠寶石拾起`)
+            bot.chat(`/stats 綠寶石合成次數`)
             console.log("等待開啟統計")
             await once(bot, 'windowOpen')
             if (!fail) {
@@ -576,13 +591,13 @@ async function cmd_getTopRaidServers(task) {
                 let wd = bot.currentWindow
                 // console.log(wd)
                 // console.log(wd.title)
-                if (!wd.title.includes("綠寶石 拾起數量")) {
+                if (!wd.title.includes("綠寶石")) {
                     rej("錯誤menu")
                 }
                 let tt = Date.now()
                 while (wd.slots[9] == null) {
                     if (Date.now() - tt > 10000) {
-                        rej(" 綠寶石 拾起數量 timeout")
+                        rej(" 綠寶石 timeout")
                     }
                     await sleep(50)
                 }
