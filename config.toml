@@ -1,6 +1,6 @@
-# Version 1.0.0
+# Version 1.0.1
 [discord_setting]                                   # Discord 設定皆用字串(用"兩邊框起來的)   !!!
-  activate = false                                   # [ true / false ] 這個不用字串。是否開啟 Discord Bot
+  activate = false                                  # [ true / false ] 這個不用字串。是否開啟 Discord Bot
   token = "-"                                       # Discord Bot Token
   owners= "123456789012345678"                      # Owner 目前這設定沒啥用... (或許之後會用於tag 或啥的)
   appId = "123456789012345678"                      # Discord Bot Application ID
@@ -15,5 +15,14 @@
 [setting]
   whitelist = ["Example1","Example2"]                # Minecraft 內 使用者白名單
   reconnect_CD = 3000                               # (ms)   重啟CD (還沒實作???忘記了)
-
+  # 以下為IP 延遲 選擇相關設定
+  selectBestIP = true # 是否選擇最佳IP
+  CheckPing = 60_000  # 檢查ping的時間間隔 (ms) 0 禁用
+  pingThreshold = 500 # 當 <CheckPing> 內平均ping大於多少ms時 斷線重連
+  ips = [                           # 可選擇的ip列表
+		"mcfallout.net",
+    "jp.mcfallout.net",
+    "na.mcfallout.net",
+    # "sg.mcfallout.net",
+  ]
 
