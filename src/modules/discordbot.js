@@ -305,14 +305,16 @@ function generateBotMenuEmbed() {
         url: 'https://github.com/JKLoveUU/Bot2',
     };
     let botsfield = '';
-    const longestLength = 100; // need to fix
+    const longestBotLength =  botManager.bots.reduce((longest, a) => {
+        return a.name.length > longest ? a.name.length : longest;
+      }, 0);
     for (let i = 0; i < botManager.getBotNums(); i++) {
         const bot = botManager.getBotByIndex(i);
         botsfield += (`${i})`.padStart(parseInt(botManager.getBotNums() / 10) + 2))
-        botsfield += (` ${bot.name}`.padEnd(longestLength + 1))
+        botsfield += (` ${bot.name}`.padEnd(longestBotLength + 1))
         botsfield += (` ${botstatus[bot.status]}\n`)
     }
-    botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.getBotNums() / 10) + 2)) + '|' + (`Bot`.padEnd(longestLength)) + '|Status\n' + botsfield : botsfield;
+    botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.getBotNums() / 10) + 2)) + '|' + (`Bot`.padEnd(longestBotLength)) + '|Status\n' + botsfield : botsfield;
     const embed = new MessageEmbed()
         //.setDescription('Choose one of the following options:')
         .setAuthor(author)
