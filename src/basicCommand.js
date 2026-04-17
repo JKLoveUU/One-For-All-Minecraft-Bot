@@ -5,8 +5,9 @@ const { Vec3 } = require('vec3')
 const { once } = require('events')
 const containerOperation = require(`../lib/containerOperation`);
 const mcFallout = require(`../lib/mcFallout`);
-const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
-var whetherPause = false, stop = false;
+const { sleep, readConfig } = require('../lib/common')
+const { initModule } = require('../lib/commandModule')
+const Status = require('./modules/botstatus')
 let logger
 let mcData
 let bot_id
@@ -254,11 +255,12 @@ const basicCommand = {
             permissionRequre: 0,
         },
     ],
-    async init(bott, user_id, lg) {
-        logger = lg
-        bot_id = user_id;
-        bot = bott
-        mcData = require('minecraft-data')(bot.version)
+    async init(ctx) {
+        const result = await initModule(ctx);
+        logger = result.logger;
+        mcData = result.mcData;
+        bot_id = result.bot_id;
+        bot = result.bot;
     }
 }
 async function cmd_goto(task) {
@@ -534,7 +536,7 @@ async function cmd_throwall(task) {
     }
 }
 async function cmd_exit(task) {
-    process.send({ type: 'setStatus', value: 0 })
+    process.send({ type: 'setStatus', value: Status.CLOSED })
     await bot.gkill(0)
 }
 async function cmd_say(task) {
@@ -689,10 +691,5 @@ async function taskreply(task, mc_msg, console_msg, discord_msg) {
 }
 async function notImplemented(task) {
     taskreply(task, "Not Implemented", "Not Implemented", "Not Implemented")
-}
-async function readConfig(file) {
-    var raw_file = await fsp.readFile(file);
-    var com_file = await JSON.parse(raw_file);
-    return com_file;
 }
 module.exports = basicCommand
