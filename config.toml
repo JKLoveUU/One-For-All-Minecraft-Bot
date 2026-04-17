@@ -15,14 +15,14 @@
 [setting]
   whitelist = ["Example1","Example2"]                # Minecraft 內 使用者白名單
   reconnect_CD = 3000                               # (ms)   重啟CD (還沒實作???忘記了)
+  enableEXPTUI = true # 測試版 tui 顯示
   # 以下為IP 延遲 選擇相關設定
   selectBestIP = true # 是否選擇最佳IP
   CheckPing = 60_000  # 檢查ping的時間間隔 (ms) 0 禁用
   pingThreshold = 500 # 當 <CheckPing> 內平均ping大於多少ms時 斷線重連
   ips = [                           # 可選擇的ip列表
-		"mcfallout.net",
+	"mcfallout.net",
     "jp.mcfallout.net",
     "na.mcfallout.net",
     # "sg.mcfallout.net",
   ]
-

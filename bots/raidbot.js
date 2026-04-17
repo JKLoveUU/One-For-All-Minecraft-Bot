@@ -6,6 +6,13 @@
 if (!process.argv[2]) {
   return
 }
+// Route all console.* through the shared logger → parent via IPC (must run before other requires).
+require("../src/logger").installChildConsoleCapture();
+// Adapter: raidbot's existing calls use (logToFile, type, ...args); parent fills in the bot name.
+const _sharedLogger = require("../src/logger").logger;
+function logger(logToFile, type, ...args) {
+  _sharedLogger(logToFile, type, process.argv[2] || "RAID", ...args);
+}
 let debug = process.argv.includes("--debug");
 let enableChat = process.argv.includes("--chat");
 let login = false
@@ -16,10 +23,13 @@ const fs = require('fs')
 const fsp = require('fs').promises
 const sd = require('silly-datetime');
 //const pcfg = require(`../cfg/profiles.json`)[process.argv[2]]
-const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
-const profiles = require(`${process.cwd()}/profiles.json`);
+const path = require('path');
+const { sleep } = require('../lib/common')
+const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+const profiles = require(`${baseDir}/profiles.json`);
 const commands = []
 const basicCommand = require(`../src/basicCommand`)
+const Status = require('../src/modules/botstatus')
 let pcfg = {
   "farm": ["ExampleFarm1"],
   "printEff": true,
@@ -30,7 +40,7 @@ const { once } = require('events')
 if (!profiles[process.argv[2]]) {
   //已經在parent檢查過了 這邊沒有必要
   console.log(`profiles中無 ${process.argv[2]} 資料`)
-  process.send({ type: 'setStatus', value: 1000 })
+  process.send({ type: 'setStatus', value: Status.CLOSED_PROFILE_NOT_FOUND })
   process.exit(2001)
 }
 if (!fs.existsSync(`config/${process.argv[2]}`)) {
@@ -98,7 +108,7 @@ if (!fcfg) {
 /** @param {number} ms */
 const timer = ms => new Promise(res => setTimeout(res, ms))
 process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
-process.send({ type: 'setStatus', value: 3001 })
+process.send({ type: 'setStatus', value: Status.LOGGING_IN })
 const botinfo = {
   server: -1,
   serverCH: -1,
@@ -233,10 +243,11 @@ const bot = (() => { // createMcBot
   bot.once('spawn', async () => {
     logger(true, "INFO", `Logged into minecraft as ${bot.username}.`)
     bot.botinfo = botinfo;
-    await basicCommand.init(bot, process.argv[2], logger);
+    const botContext = { bot, bot_id: process.argv[2], logger };
+    await basicCommand.init(botContext);
     taskManager.init();
     bot.setQuickBarSlot(1)
-    process.send({ type: 'setStatus', value: 2201 })
+    process.send({ type: 'setStatus', value: Status.RAID_RUNNING })
     if (process.argv[3] !== '1')
       bot.chatAddPattern(
         /^(\[[A-Za-z0-9-_您]+ -> [A-Za-z0-9-_您]+\] .+)$/,
@@ -311,16 +322,16 @@ const bot = (() => { // createMcBot
   bot.on('error', async (error) => {
     if (error?.message?.includes('RateLimiter disallowed request')) {
       process.send({ type: 'setReloadCD', value: 60_000 })
-      process.send({ type: 'setStatus', value: 4 })
+      process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
       await kill(1900)
     } else if (error?.message?.includes('Failed to obtain profile data for')) {
-      process.send({ type: 'setStatus', value: 4 })
+      process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
       await kill(1901)
     } else if (error?.message?.includes('request to https://sessionserver.mojang.com/session/minecraft/join failed')) {
-      process.send({ type: 'setStatus', value: 4 })
+      process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
       await kill(1902)
     } else if (error?.message?.includes('read ECONNRESET')) {
-      process.send({ type: 'setStatus', value: 4 })
+      process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
       await kill(1903)
     }
     console.log('[ERROR]name:\n' + error.name)
@@ -359,14 +370,24 @@ process.on('message', async (message) => {
       config = message.config;
       break;
     case 'dataRequire':
-      dataRequiredata = {
-        name: bot.username,
-        server: botinfo.server,
-        coin: botinfo.coin,
-        balance: botinfo.balance,
-        position: bot.entity.position,
-        tasks: taskManager.tasks,
-        runingTask: taskManager.tasking
+      try {
+        const _tm    = (typeof taskManager !== 'undefined') ? taskManager : null;
+        const _queue = (_tm && Array.isArray(_tm.tasks)) ? _tm.tasks : [];
+        const _run   = (_tm && _tm.tasking && _queue.length > 0) ? _queue[0] : null;
+        const _rest  = _run ? _queue.slice(1) : _queue;
+        dataRequiredata = {
+          name:       bot && bot.username       != null ? bot.username       : '-',
+          server:     botinfo && botinfo.server != null ? botinfo.server     : '-',
+          coin:       botinfo && botinfo.coin   != null ? botinfo.coin       : '-',
+          balance:    botinfo && botinfo.balance!= null ? botinfo.balance    : '-',
+          position:   (bot && bot.entity && bot.entity.position) ? bot.entity.position : '-',
+          tasks:      _rest,
+          runingTask: _run || '-',
+          ping:       (bot && bot.player && bot.player.ping != null) ? bot.player.ping : '-',
+          memory:     process.memoryUsage(),
+        }
+      } catch (_) {
+        dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: '-', ping: '-', memory: process.memoryUsage() }
       }
       process.send({ type: 'dataToParent', value: dataRequiredata })
       break;
@@ -387,11 +408,11 @@ process.on('message', async (message) => {
       console.log(`已傳送訊息至 ${bot.username}: ${message.text}`);
       break;
     case 'reload':
-      process.send({ type: 'setStatus', value: 3002 })
+      process.send({ type: 'setStatus', value: Status.RESTARTING })
       await kill(1002)
       break;
     case 'exit':
-      process.send({ type: 'setStatus', value: 0 })
+      process.send({ type: 'setStatus', value: Status.CLOSED })
       await kill(0)
       break;
     default:
@@ -980,35 +1001,6 @@ const taskManager = {
   // commit(task) {
   //     this.eventl.emit('commit', task);
   // },
-}
-function logger(logToFile = false, type = "INFO", ...args) {
-  if (logToFile) {
-    process.send({ type: 'logToFile', value: { type: type, msg: args.join(' ') } })
-    return
-  }
-  let fmtTime = sd.format(new Date(), 'YYYY/MM/DD HH:mm:ss')
-  let colortype
-  switch (type) {
-    case "DEBUG":
-      colortype = "\x1b[32m" + type + "\x1b[0m";
-      break;
-    case "INFO":
-      colortype = "\x1b[32m" + type + "\x1b[0m";
-      break;
-    case "WARN":
-      colortype = "\x1b[33m" + type + "\x1b[0m";
-      break;
-    case "ERROR":
-      type = "\x1b[31m" + type + "\x1b[0m";
-      colortype;
-    case "CHAT":
-      colortype = "\x1b[93m" + type + "\x1b[0m";
-      break;
-    default:
-      colortype = type;
-      break;
-  }
-  console.log(`[${fmtTime}][${colortype}][${process.argv[2]}] ${args.join(' ')}`);
 }
 
 function interactBlock(pos) {

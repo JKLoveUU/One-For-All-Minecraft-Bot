@@ -3,10 +3,10 @@ const EventEmitter = require("events");
 const { logger } = require("../logger");
 const { fork } = require("child_process");
 const path = require("path");
-const config = require(`${process.cwd()}/config.toml`);
+const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+const config = require(`${baseDir}/config.toml`);
 const { exit } = require("process");
 const exitcode = require("./exitcode");
-const botstatus = require("./botstatus");
 const { log } = require("console");
 const net = require("net");
 // mc 不知道為甚麼不require打包就會漏掉了
@@ -59,7 +59,7 @@ class BotManager {
     console.log(`Id`.padEnd((parseInt(this.bots.length / 10)) + 2)+' | '+ (`Bot`.padEnd(longestBotLength)) +' | '+(`Status`.padEnd(longestStatusLength))+  ' | Type    | CrtType')
     this.bots.forEach((bot, i) => {
       console.log(
-        `${i}  | ${bot.name.padEnd(longestBotLength)} | ${botstatus[bot.status] ? botstatus[bot.status].padEnd(longestStatusLength):bot.status} | ${
+        `${i}  | ${bot.name.padEnd(longestBotLength)} | ${(bot.status || '-').padEnd(longestStatusLength)} | ${
           bot.type ? bot.type.padEnd(typeLength) : "-".padEnd(typeLength)
         } | ${
           bot.crtType
@@ -289,7 +289,26 @@ class BotManager {
     if (bot.debug) args.push("--debug");
     if (bot.chat) args.push("--chat");
     if (config.setting.selectBestIP) args.push(`--ip=${this._bestIP}`);
-    const child = fork(botFilePath, args);
+    const forkOpts = this.silentChildren ? { silent: true } : {};
+    const child = fork(botFilePath, args, forkOpts);
+    if (this.silentChildren) {
+      const pipeLine = (stream, type) => {
+        if (!stream) return;
+        let buf = "";
+        stream.on("data", (chunk) => {
+          buf += chunk.toString("utf8");
+          let idx;
+          while ((idx = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, idx).replace(/\r$/, "");
+            buf = buf.slice(idx + 1);
+            if (line.length) logger(true, type, bot.name, line);
+          }
+        });
+        stream.on("end", () => { if (buf.length) logger(true, type, bot.name, buf); });
+      };
+      pipeLine(child.stdout, "INFO");
+      pipeLine(child.stderr, "ERROR");
+    }
     this.setBotChildProcess(bot, child);
     this.registerBotChildProcessEvent(bot, child);
     child.send({ type: "init", config: config });

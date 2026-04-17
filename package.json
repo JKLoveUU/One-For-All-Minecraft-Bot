@@ -1,12 +1,14 @@
 {
   "name": "one-for-all-mcfallout-bot",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "minecraft bot for mcfallout server",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "bw": "pkg -t node18-win-x64 index.js -o release/ofa.exe",
-    "bl": "pkg -t node18-linux index.js -o ofal/ofa_linux"
+    "bw": "pkg -t node22-win-x64 index.js -o release/ofa.exe",
+    "bl": "pkg -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" index.js -o ofal/ofa_linux",
+    "bbw": "pkg index.js -t node22-win-x64 --compress GZip -o release/ofa.exe",
+    "bbl": "pkg index.js -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" --compress GZip -o release/ofa_linux"
   },
   "repository": {
     "type": "git",
@@ -21,16 +23,21 @@
     "./src"
   ],
   "pkg": {
-    "assets": [],
+    "assets": [
+      "node_modules/neo-blessed/usr/**/*"
+    ],
     "scripts": [
       "src/modules/botmanager.js",
       "bots/generalbot.js",
       "index.js",
+      "bots/lib/*.js",
       "bots/*.js",
       "lib/**/*.js",
       "lib/*.js",
       "src/**/*.js",
-      "src/*.js"
+      "src/*.js",
+      "node_modules/neo-blessed/lib/widgets/*.js",
+      "node_modules/@discordjs/rest/dist/**/*.js"
     ]
   },
   "author": "JKLove",
@@ -39,11 +46,16 @@
     "url": "https://github.com/JKLoveUU/One-For-All-Minecraft-Bot/issues"
   },
   "homepage": "https://github.com/JKLoveUU/One-For-All-Minecraft-Bot#readme",
-  "engines": { "node": ">=18" },
-  "overrides": { "axios": "^1.13.1", "undici": "^6.23.0" },
+  "engines": {
+    "node": ">=18"
+  },
+  "overrides": {
+    "axios": "^1.13.1",
+    "undici": "^6.23.0"
+  },
   "dependencies": {
     "@discordjs/builders": "^1.7.0",
-    "@discordjs/rest": "^1.7.0",
+    "@discordjs/rest": "^2.6.1",
     "@types/node": "^20.11.18",
     "axios": "^1.13.1",
     "chinese-numbers-to-arabic": "^1.5.0",
@@ -53,8 +65,9 @@
     "js-binary": "^1.2.0",
     "minecraft-data": "^3.61.0",
     "minecraft-protocol": "^1.46.0",
-    "mineflayer": "^4.18.0",
+    "mineflayer": "^4.10.0",
     "moment": "^2.29.1",
+    "neo-blessed": "^0.2.0",
     "p-timeout": "^2.0.0",
     "prismarine-chat": "^1.9.1",
     "prismarine-item": "^1.14.0",
@@ -67,10 +80,7 @@
     "toml-require": "^1.2.0",
     "vec3": "^0.1.10"
   },
-  "pnpm": {
-    "patchedDependencies": {
-      "minecraft-protocol@1.46.0": "patches/minecraft-protocol@1.46.0.patch",
-      "mineflayer@4.18.0": "patches/mineflayer@4.18.0.patch"
-    }
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.15.0"
   }
 }

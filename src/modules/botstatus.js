@@ -1,36 +1,36 @@
-const botstatus = {
-  Close: {
-    code: 0,
-    description: "Closed",
-  },
-  //  通用區
-  0: "Closed", //正常關閉
-  1: "Free",
-  2: "In tasking",
-  3: "Raid",
-  4: "Waiting Reload CoolDown",
-  12: "Wait Next Quest",
-  100: "proxy server restarting",
-  1000: "Closed(Profile Not Found)",
-  1001: "Closed(Type Not Found)",
-  //  Raid 區
-  2000: "raid - closed", //unused
-  2001: "Restarting",
-  2200: "Running",
-  2201: "Running(Raid)",
-  2401: "Closed(RaidFarm Not Found)",
-  //  General 區
-  3000: "general - closed", //unused
+const Status = {
+  // 通用
+  CLOSED:                'Closed',
+  FREE:                  'Free',
+  TASKING:               'In tasking',
+  RAID:                  'Raid',
+  RELOAD_COOLDOWN:       'Waiting Reload CoolDown',
+  WAIT_NEXT_QUEST:       'Wait Next Quest',
+  PROXY_RESTARTING:      'Proxy Server Restarting',
+  HIGH_PING:             'Closed(High Ping)',
+  // 錯誤關閉
+  CLOSED_PROFILE_NOT_FOUND: 'Closed(Profile Not Found)',
+  CLOSED_TYPE_NOT_FOUND:    'Closed(Type Not Found)',
+  // Raid
+  RAID_RUNNING:          'Running(Raid)',
+  RAID_CLOSED_NOT_FOUND: 'Closed(RaidFarm Not Found)',
+  // General
+  LOGGING_IN:            'Logging in',
+  RESTARTING:            'Restarting',
+  RUNNING:               'Running',
+  IDLE:                  'Running(Idle)',
+  RUNNING_TASK:          'Running(Tasking)',
+  // Quest
+  QUESTING:              'Questing(Handling)',
+  QUEST_WAITING:         'Questing(Wait Next)',
+  // Task 細項
+  TASK_MAPART:           'Tasking(Mapart)',
+  TASK_BUILD:            'Tasking(Build)',
+  TASK_CLEAR_AREA:       'Tasking(ClearArea)',
+  TASK_WAREHOUSE:        'Tasking(Warehouse)',
+  TASK_VILLAGER:         'Tasking(Villager)',
+  TASK_FARM:             'Tasking(Farm)',
+  TASK_PAUSED:           'Tasking(Paused)',
+}
 
-  3001: "Logging in",
-  3002: "Restarting",
-  3200: "Running",
-  3201: "Running(Idle)",
-  3202: "Running(Tasking)",
-  3210: "Questing(Handling)",
-  3211: "Questing(Wait Next)",
-
-  //    process.send({ type: 'setStatus', value: 1000 })
-};
-
-module.exports = botstatus;
+module.exports = Status

@@ -2,8 +2,10 @@ const { REST } = require('@discordjs/rest');
 const { Client, Intents, MessageActionRow, MessageButton, MessageOptions, MessagePayload, MessageSelectMenu, MessageEmbed, Message } = require('discord.js');
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS] });
-const config = require(`${process.cwd()}/config.toml`);
-const botstatus = require("./botstatus");
+const Status = require('./botstatus');
+const path = require('path');
+const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+const config = require(`${baseDir}/config.toml`);
 let botMenuId = undefined;
 let botManager;
 const { logger } = require("../logger");
@@ -149,18 +151,17 @@ function addDiscordBotEventHandler(){
                     })
                     return
                 }
-                //need check status here
-                if (targetBotIns.status == 2200) {
-                    await interaction.reply({
-                        content: 'Menu For Raid Not Implemented',
-                        ephemeral: true
-                    })
+                const GENERAL_RUNNING = [Status.RUNNING, Status.IDLE, Status.RUNNING_TASK,
+                    Status.QUESTING, Status.QUEST_WAITING, Status.TASK_MAPART,
+                    Status.TASK_BUILD, Status.TASK_CLEAR_AREA, Status.TASK_WAREHOUSE,
+                    Status.TASK_VILLAGER, Status.TASK_FARM, Status.TASK_PAUSED]
+                if (targetBotIns.status === Status.RAID_RUNNING) {
+                    let botinfo = await botManager.getBotInfo(targetBot)
+                    await interaction.reply(generateRaidBotControlMenu(botinfo))
                     return
+                } else if (GENERAL_RUNNING.includes(targetBotIns.status)) {
                     let botinfo = await botManager.getBotInfo(targetBot)
-                    interaction.reply(generateRaidBotControlMenu(botinfo))
-                } else if (targetBotIns.status >= 3200) {
-                    let botinfo = await botManager.getBotInfo(targetBot)
-                    interaction.reply(generateGeneralBotControlMenu(botinfo))
+                    await interaction.reply(generateGeneralBotControlMenu(botinfo))
                     return
                 }
                 await interaction.reply({
@@ -178,6 +179,7 @@ function addDiscordBotEventHandler(){
     client.on('interactionCreate', async (interaction) => {
         if (interaction.isCommand()) return
         //  console.log(interaction)
+        if (!interaction.customId) return   // 如果同bot 有其他bot的 tab補全會觸發這個
         if (!interaction.customId.startsWith('generalbotcontrolmenu')) {
             return
         }
@@ -186,23 +188,103 @@ function addDiscordBotEventHandler(){
             await noPermission(interaction);
             return
         }
+        const botName = interaction.message.content.split(' - ')[1]
         if (interaction.isButton()) {
             switch (interaction.customId) {
                 case 'generalbotcontrolmenu-close-btn':
                     await interaction.message.delete();
                     break;
+                case 'generalbotcontrolmenu-refresh-btn': {
+                    const freshInfo = await botManager.getBotInfo(botName)
+                    if (freshInfo) {
+                        await interaction.update(generateGeneralBotControlMenu(freshInfo))
+                    } else {
+                        await interaction.reply({ content: 'Bot data unavailable', ephemeral: true })
+                    }
+                    break;
+                }
+                case 'generalbotcontrolmenu-time-btn':
+                    await interaction.reply({ content: `Current Time: ${new Date().toLocaleString()}`, ephemeral: true })
+                    break;
+                case 'generalbotcontrolmenu-newest-btn': {
+                    const freshInfo = await botManager.getBotInfo(botName)
+                    if (freshInfo) {
+                        const newMsg = await interaction.channel.send(generateGeneralBotControlMenu(freshInfo))
+                        await interaction.message.delete()
+                    }
+                    break;
+                }
                 default:
-                    await notImplemented(interaction);
+                    if (interaction.customId.startsWith('gbcm-')) {
+                        await handleGbcmButton(interaction)
+                    } else {
+                        await notImplemented(interaction)
+                    }
                     break;
             }
         } else if (interaction.isSelectMenu()) {
             const { customId, values } = interaction;
-            if (customId === 'botmenu-select') {
-                console.log(values[0])
-                await notImplemented(interaction);
+            if (customId === 'generalbotcontrolmenu-select') {
+                const action = values[0]
+                switch (action) {
+                    case 'generalbotcontrolmenu-basic-operations-menu':
+                        await interaction.reply({
+                            content: `Basic operations for ${botName}`,
+                            components: [new MessageActionRow().addComponents(
+                                new MessageButton().setCustomId(`gbcm-reload-${botName}`).setLabel('Reload').setStyle('PRIMARY'),
+                                new MessageButton().setCustomId(`gbcm-stoptask-${botName}`).setLabel('Stop Task').setStyle('DANGER'),
+                            )],
+                            ephemeral: true
+                        })
+                        break;
+                    case 'generalbotcontrolmenu-ping': {
+                        const info = await botManager.getBotInfo(botName)
+                        await interaction.reply({ content: `Ping: ${info?.ping ?? 'N/A'}ms`, ephemeral: true })
+                        break;
+                    }
+                    case 'generalbotcontrolmenu-time':
+                        await interaction.reply({ content: `Current Time: ${new Date().toLocaleString()}`, ephemeral: true })
+                        break;
+                    case 'generalbotcontrolmenu-wms-menu':
+                        await interaction.reply({ content: 'Warehouse menu - not available', ephemeral: true })
+                        break;
+                    default:
+                        await notImplemented(interaction)
+                }
             } else await notImplemented(interaction);
         } else {
             await notImplemented(interaction);
+        }
+    });
+    //raidbotcontrolmenu handler
+    client.on('interactionCreate', async (interaction) => {
+        if (interaction.isCommand()) return
+        if (!interaction.customId) return
+        if (!interaction.customId.startsWith('raidbotcontrolmenu')) return
+        console.log(`[Discord] ${interaction.customId} - ${interaction.user.username}`)
+        if (!discordWhiteListCheck(interaction.member)) {
+            await noPermission(interaction);
+            return
+        }
+        if (interaction.isButton()) {
+            const botName = interaction.message.content.split(' - ')[1]
+            switch (interaction.customId) {
+                case 'raidbotcontrolmenu-close-btn':
+                    await interaction.message.delete();
+                    break;
+                case 'raidbotcontrolmenu-refresh-btn': {
+                    const freshInfo = await botManager.getBotInfo(botName)
+                    if (freshInfo) {
+                        await interaction.update(generateRaidBotControlMenu(freshInfo))
+                    } else {
+                        await interaction.reply({ content: 'Bot data unavailable', ephemeral: true })
+                    }
+                    break;
+                }
+                default:
+                    await notImplemented(interaction);
+                    break;
+            }
         }
     });
 }
@@ -312,7 +394,7 @@ function generateBotMenuEmbed() {
         const bot = botManager.getBotByIndex(i);
         botsfield += (`${i})`.padStart(parseInt(botManager.getBotNums() / 10) + 2))
         botsfield += (` ${bot.name}`.padEnd(longestBotLength + 1))
-        botsfield += (` ${botstatus[bot.status]}\n`)
+        botsfield += (` ${bot.status}\n`)
     }
     botsfield = botsfield ? (`Id`.padEnd(parseInt(botManager.getBotNums() / 10) + 2)) + '|' + (`Bot`.padEnd(longestBotLength)) + '|Status\n' + botsfield : botsfield;
     const embed = new MessageEmbed()
@@ -412,48 +494,98 @@ function generateGeneralBotControlMenu(botinfo) {
     );
     return { content: `Control Panel for bot - ${botinfo.id}`, embeds: [embed], components: [row1, row2] };
 }
-function generateGeneralBotControlMenuEmbed(botinfo) {
+function generateGeneralBotControlMenuEmbed(botinfo, page = 0, pageSize = 5) {
     const author = {
         name: botinfo.name,
         iconURL: botinfo.avatar,
         url: 'https://discord.js.org',
     };
-    //console.log(botinfo)
     let crtTask = botinfo.runingTask ? `\`${botinfo.tasks[0].displayName}\`` : '\`-\`';
-    let taskQueue = ''
-    for (let i = (botinfo.runingTask ? 1 : 0); i < botinfo.tasks.length; i++) {
-        taskQueue += '\`' + botinfo.tasks[i].displayName + '\`\n'
-    }
-    taskQueue = taskQueue ? taskQueue : '\`-\`'
+    const startIdx = botinfo.runingTask ? 1 : 0;
+    const queueTasks = botinfo.tasks.slice(startIdx);
+    const totalPages = Math.max(1, Math.ceil(queueTasks.length / pageSize));
+    const currentPage = Math.min(page, totalPages - 1);
+    const pageTasks = queueTasks.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+    let taskQueue = pageTasks.map(t => `\`${t.displayName}\``).join('\n') || '\`-\`';
+
+    const botIns = botManager.getBotByName(botinfo.id);
+    const statusText = botIns ? botIns.status : 'Unknown';
+
     const embed = new MessageEmbed()
-        //.setDescription('Choose one of the following options:')
         .setAuthor(author)
         .setColor('#7CFC00')
         .setThumbnail(botinfo.avatar)
         .addFields(
-            { name: ':globe_with_meridians:分流', value: `${'`' + (botinfo.server).toString().padEnd(3) + '`'}`, inline: true },
+            { name: ':globe_with_meridians:分流', value: `\`${(botinfo.server).toString().padEnd(3)}\``, inline: true },
+            { name: ':signal_strength:Ping', value: `\`${botinfo.ping ?? 'N/A'}ms\``, inline: true },
+            { name: ':satellite:Status', value: `\`${statusText}\``, inline: true },
             { name: ':coin:Coin', value: '`' + botinfo.coin.toString().padEnd(7) + '`', inline: true },
             { name: ':moneybag:Balance', value: '`' + botinfo.balance.toString().padEnd(14) + '`', inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
             {
                 name: ':triangular_flag_on_post:座標',
-                value: `X:${'`' + botinfo.position.x.toFixed(1).toString().padStart(7) + '`'} Y:${'`' + botinfo.position.y.toFixed(1).toString().padStart(7) + '`'} Z:${'`' + botinfo.position.z.toFixed(1).toString().padStart(7) + '`'}`
+                value: `X:\`${botinfo.position.x.toFixed(1).padStart(7)}\` Y:\`${botinfo.position.y.toFixed(1).padStart(7)}\` Z:\`${botinfo.position.z.toFixed(1).padStart(7)}\``
                 , inline: false
             },
-            //{ name: '\u200B', value: '\u200B' },
             { name: ':arrow_forward:當前任務', value: crtTask },
-            //{ name: '\u200b', value: '\u200b', inline: false }, // This creates an empty field to ensure the next row starts on a new line
-            { name: `:pencil:任務列隊 ${'-'} / ${botinfo.tasks.length} PAGE ${'-'}`, value: taskQueue },
+            { name: `:pencil:任務列隊 ${currentPage + 1} / ${totalPages} PAGE`, value: taskQueue },
         )
         .setTimestamp()
         .setFooter({ text: 'One For All', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
     return embed;
 }
+async function handleGbcmButton(interaction) {
+    const parts = interaction.customId.split('-')
+    const action = parts[1]
+    const botName = parts.slice(2).join('-')
+    const bot = botManager.getBotByName(botName)
+    if (!bot || !bot.childProcess) {
+        await interaction.reply({ content: `Bot ${botName} not available`, ephemeral: true })
+        return
+    }
+    switch (action) {
+        case 'reload':
+            bot.childProcess.send({ type: 'reload' })
+            await interaction.reply({ content: `Reload sent to ${botName}`, ephemeral: true })
+            break;
+        case 'stoptask':
+            bot.childProcess.send({ type: 'cmd', text: '.stop' })
+            await interaction.reply({ content: `Stop task sent to ${botName}`, ephemeral: true })
+            break;
+        default:
+            await notImplemented(interaction)
+    }
+}
 //Raid Bot Control Menu
 function generateRaidBotControlMenu(botinfo) {
     const embed = generateRaidBotControlMenuEmbed(botinfo);
+    const row1 = new MessageActionRow().addComponents(
+        new MessageButton()
+            .setCustomId('raidbotcontrolmenu-refresh-btn')
+            .setLabel('Refresh')
+            .setStyle('SUCCESS')
+            .setEmoji('♻️'),
+        new MessageButton()
+            .setCustomId('raidbotcontrolmenu-close-btn')
+            .setLabel('Close Panel')
+            .setStyle('DANGER')
+            .setEmoji('⚪')
+    );
+    return { content: `Raid Bot - ${botinfo.id}`, embeds: [embed], components: [row1], ephemeral: true }
 }
 function generateRaidBotControlMenuEmbed(botinfo) {
-
+    const embed = new MessageEmbed()
+        .setAuthor({ name: botinfo.name, iconURL: botinfo.avatar })
+        .setColor('#FF4500')
+        .setThumbnail(botinfo.avatar)
+        .addFields(
+            { name: ':globe_with_meridians:分流', value: `\`${botinfo.server}\``, inline: true },
+            { name: ':signal_strength:Ping', value: `\`${botinfo.ping ?? 'N/A'}ms\``, inline: true },
+            { name: ':moneybag:Balance', value: `\`${botinfo.balance}\``, inline: true },
+        )
+        .setTimestamp()
+        .setFooter({ text: 'One For All', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
+    return embed;
 }
 function discordWhiteListCheck(member) {
     //console.log(member)

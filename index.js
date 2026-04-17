@@ -1,37 +1,46 @@
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[FATAL] ${err && err.stack ? err.stack : err}\n`);
+  process.exit(1);
+});
 const readline = require("readline");
 const fs = require("fs");
+const path = require("path");
 const toml = require("toml-require").install({ toml: require("toml") });
-const config = require(`${process.cwd()}/config.toml`);
+const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+const config = require(`${baseDir}/config.toml`);
 // mc 不知道為甚麼不require打包就會漏掉了
 const rq_general = require(`./bots/generalbot.js`)
 // const rq_raid = require(`./bots/raidbot.js`)
 // const rq_logger = require("./src/logger");
 const { logger } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
-const botstatus = require("./src/modules/botstatus.js");
 const {
   DiscordBotStart,
   DiscordBotStop,
 } = require("./src/modules/discordbot.js");
 
 const botManager = new BotManager();
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  completer: (line) => {
-    const completions = [
-      ".switch",
-      ".list",
-      ".create",
-      ".exit",
-      ".reload",
-      ".ff",
-      ".all",
-    ];
-    const hits = completions.filter((cmd) => cmd.startsWith(line));
-    return [hits.length ? hits : completions, line];
-  },
-});
+let rl = null;
+function createReadline() {
+  rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    completer: (line) => {
+      const completions = [
+        ".switch",
+        ".list",
+        ".create",
+        ".exit",
+        ".reload",
+        ".ff",
+        ".all",
+      ];
+      const hits = completions.filter((cmd) => cmd.startsWith(line));
+      return [hits.length ? hits : completions, line];
+    },
+  });
+  return rl;
+}
 
 function checkPaths() {
   const paths = ["logs", "config/global"];
@@ -49,7 +58,7 @@ function checkBotValid(bot) {
   }
   if (!bot.childProcess) {
     // console.log(`No child process for bot ${bot.name}`);
-    console.log(`${bot.name} is in ${botstatus[bot.status]}, try it later!`);
+    console.log(`${bot.name} is in ${bot.status}, try it later!`);
     return false;
   }
   return true;
@@ -155,19 +164,22 @@ function handleCommand(input) {
 }
 
 function addConsoleEventHandler() {
+  createReadline();
   rl.on("line", handleCommand);
   rl.on("close", async () => {
     await handleClose();
   });
 }
 
-function addMainProcessEventHandler() {
+function addMainProcessEventHandler({ registerSignals = true } = {}) {
   process.on("uncaughtException", (err) => {
     logger(true, "ERROR", "CONSOLE", `${err}\nStack: ${err.stack}`);
     console.log("PID:", process.pid);
   });
-  process.on("SIGINT", handleClose);
-  process.on("SIGTERM", handleClose);
+  if (registerSignals) {
+    process.on("SIGINT", handleClose);
+    process.on("SIGTERM", handleClose);
+  }
 }
 
 async function handleClose() {
@@ -189,8 +201,18 @@ function main() {
     "CONSOLE",
     `Program starting. Press Ctrl+C to exit   PID: ${process.pid}`
   );
-  addMainProcessEventHandler();
-  addConsoleEventHandler();
+  const useTUI = !!(config.setting && config.setting.enableEXPTUI);
+  addMainProcessEventHandler({ registerSignals: !useTUI });
+  if (useTUI) {
+    botManager.silentChildren = true;
+    const tui = require("./src/modules/tui.js");
+    tui.start(botManager, config, {
+      onCommand: handleCommand,
+      onExit: handleClose,
+    });
+  } else {
+    addConsoleEventHandler();
+  }
   if (config.discord_setting.activate) {
     DiscordBotStart(botManager);
   }
@@ -199,7 +221,7 @@ function main() {
     botManager.updateBestIP();
   }, 1000 * 60 * 5);
   //botManager.loadProfiles();
-  process.title = "[Bot][-1] type .switch to select a bot";
+  if (!useTUI) process.title = "[Bot][-1] type .switch to select a bot";
   let timerdelay = 3005;
   config.account.id.forEach((id) => {
     setTimeout(() => {
