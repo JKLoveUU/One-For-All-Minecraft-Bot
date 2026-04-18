@@ -12,9 +12,23 @@ Minecraft Bot for McFallout server.
 - [設定](docs/zh_tw/setting.md)
 - [指令](docs/zh_tw/commands.md)
 - [地圖畫](docs/zh_tw/Mapart.md)
+- ~~[清理區塊](docs/zh_tw/ClearArea.md) Clear Area 清理區塊 (暫未上傳)~~ 
+- ~~[自動任務](docs/zh_tw/AutoQuest.md) AutoQuest 自動解廢土任務 (暫未上傳)~~
+- ~~[村民交易](docs/zh_tw/usage.md) Villager Trading (暫未上傳)~~
 - ~~[兌換](docs/zh_tw/CraftAndExchange.md)~~ 該功能已被伺服器移除
 
 - ~~ [突襲](docs/zh_tw/setting.md) 設定教學~~ 版本更新後 突襲機制改變
+
+- [更新日誌](docs/CHANGELOG.md) CHANGELOG
+
+## TUI
+
+### Screenshot
+
+config.toml 內啟用  [settings] enableEXPTUI = true
+![Dashboard](docs/img/Screenshot%202026-04-18%20005833.png)
+![Console](docs/img/Screenshot%202026-04-18%20005843.png)
+
 
 ## Contribute
 - [JKLove](https://github.com/JKLoveUU)
@@ -55,9 +69,7 @@ mapart 補材料時 分流重啟 多耗時很久
     3. command usage suggest
     4. .help .?
 * MC-Feature
-    1. Clear Area 清理區塊
-    2. Quest 自動解廢土任務
-    3. ~~Villager Trading~~ 市面上已經有很多了
+
 --- 
 ## Develop
 

@@ -17,7 +17,14 @@
 
 [地圖畫判定標準與後續解釋事宜](https://discord.com/channels/358942292352040970/465960604427878420/1157959585680851054)
 ## 設定
-[seehere](/Mapart.md)
+
+詳細的設定檔欄位與材料站建置流程，請參考 [Mapart_config.md](./Mapart_config.md)。
+
+簡述：
+- `config/global/mapart.json` — 投影檔資料夾 / Discord webhook / 方塊替換表
+- `config/<bot>/mapart.json` — 當前投影檔、材料站、開圖 / 分裝場地
+- `config/global/mpStation_<name>.json` — 材料站盒子座標表
+
 ## 主指令
 
 - mapart
@@ -170,3 +177,44 @@ The below example shows how to set file under `雜魚納西達` folder.
 *目前沒有設定指令 需於config/`<bot>`/mapart.json 自行設定
 #### example
 `/m bot mapart wrap`
+
+---
+
+### **材料站掃描**
+- material
+- m
+
+於材料站內掃描盒子排，自動推出方向，產出 `materials` 清單到記憶體（尚未寫檔）。
+
+詳情與用法請見 [Mapart_config.md §3.4](./Mapart_config.md#34-使用-mp-material-自動產生)。
+
+#### Syntax
+`material <server> <warp> <x1> <y1> <z1> <x2> <y2> <z2>`
+
+#### example
+`/m bot mapart material 59 JKLoveJK_2 -4005 99 -4002 -4005 99 -4017`
+
+---
+
+### **材料站導出**
+- file
+- f
+
+將 `material` 掃描完的資料輸出為 JSON 檔到 bot 執行目錄（需手動移到 `config/global/`）。
+
+#### Syntax
+`file <filename>`
+
+#### example
+`/m bot mapart file mpStation_JK`
+
+---
+
+### **Test / Debug**
+- test — 執行一次建造測試（不進入 longRunning 迴圈）
+- debug — 切換 debug 模式（詳細 log）
+
+#### example
+`/m bot mapart test`
+
+`/m bot mapart debug`
