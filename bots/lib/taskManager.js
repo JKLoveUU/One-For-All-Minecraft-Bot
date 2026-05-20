@@ -104,8 +104,9 @@ function createTaskManager(deps) {
                 logger(true, 'ERROR', process.argv[2], `task ${task.displayName} not found`)
                 return
             }
-            const taskStatus = this.moduleStatusMap[args[0]]
-            if (taskStatus) process.send({ type: 'setStatus', value: taskStatus })
+            // 有些設定等 即時指令不該設狀態
+            // const taskStatus = this.moduleStatusMap[args[0]]
+            // if (taskStatus) process.send({ type: 'setStatus', value: taskStatus })
             await result.execute(task)
             if (result.longRunning) logger(true, 'INFO', process.argv[2], `任務 ${task.displayName} \x1b[32mcompleted\x1b[0m`)
         },
@@ -141,11 +142,40 @@ function createTaskManager(deps) {
             let crtTask = this.tasks[0]
             if (getLogin()) await this.save();
             await this.execute(crtTask)
-            this.tasks.shift()
+            // 用 indexOf 找回 crtTask 再 splice — 避免「執行中其他指令把 tasks[0] 移除」
+            // 後本行誤把後一筆當成已完成任務而再次 shift。
+            const idx = this.tasks.indexOf(crtTask)
+            if (idx >= 0) this.tasks.splice(idx, 1)
             if (getLogin()) await this.save();
             this.tasking = false;
             process.send({ type: 'setStatus', value: Status.IDLE })
             if (this.tasks.length) await this.loop(true)
+        },
+        // 從佇列移除任務。target: 'all' / 'top' / 1-indexed 整數。
+        // 注意:tasks[0] 若正在執行,移除只清除佇列與持久化,執行中的本體不會被中止。
+        // 回傳 { ok, removed: [...], message }。
+        async removeTask(target) {
+            if (target === 'all' || target === '*') {
+                const removed = this.tasks.slice()
+                this.tasks = []
+                if (getLogin()) await this.save()
+                return { ok: true, removed, message: `已移除全部 ${removed.length} 個任務` }
+            }
+            if (target === 'top' || target === 'first') {
+                if (this.tasks.length === 0) return { ok: false, removed: [], message: '無任務可移除' }
+                const [removed] = this.tasks.splice(0, 1)
+                if (getLogin()) await this.save()
+                const note = this.tasking ? ' (注意: 該任務正在執行中,持久化已清除但執行不會中止)' : ''
+                return { ok: true, removed: [removed], message: `已移除頂端任務: ${removed?.displayName ?? '<unknown>'}${note}` }
+            }
+            const n = parseInt(target, 10)
+            if (Number.isFinite(n) && n >= 1 && n <= this.tasks.length) {
+                const [removed] = this.tasks.splice(n - 1, 1)
+                if (getLogin()) await this.save()
+                const note = (n === 1 && this.tasking) ? ' (注意: 該任務正在執行中,持久化已清除但執行不會中止)' : ''
+                return { ok: true, removed: [removed], message: `已移除索引 ${n} 任務: ${removed?.displayName ?? '<unknown>'}${note}` }
+            }
+            return { ok: false, removed: [], message: `無效目標: ${target} (用 all / top / 1..${this.tasks.length})` }
         },
         async save() {
             let data = {

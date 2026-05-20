@@ -20,6 +20,7 @@ class BotManager {
     this.currentBot = null; // Current selected bot instance
     this.handle = new EventEmitter();
     this.profiles = this.loadProfiles();
+    this.shuttingDown = false;
   }
   getBotByName(name) {
     return this.bots.find((bot) => bot.name === name) || null;
@@ -116,12 +117,47 @@ class BotManager {
     }
   }
 
-  stop() {
+  // Graceful shutdown: send 'exit' to each child, then wait for all child processes to
+  // actually exit (or hit `timeoutMs`, in which case remaining survivors are SIGKILL'd).
+  // Returns { exited, killed, timedOut } so callers can log results.
+  async stop(timeoutMs = 8000) {
+    this.shuttingDown = true;
+    // Cancel any pending restart timers so we don't fork a new bot mid-shutdown.
     for (const bot of this.bots) {
-      if (bot.childProcess) {
-        bot.childProcess.send({ type: "exit" });
+      if (bot.reloadCancel) {
+        clearTimeout(bot.reloadCancel);
+        bot.reloadCancel = null;
       }
     }
+    const live = this.bots.filter((b) => b.childProcess);
+    if (live.length === 0) return { exited: 0, killed: 0, timedOut: 0 };
+    const total = live.length;
+    logger(true, "INFO", "BOTMANAGER", `stop(): waiting for ${total} child${total === 1 ? "" : "ren"} to exit...`);
+    for (const bot of live) {
+      try { bot.childProcess.send({ type: "exit" }); } catch (_) {}
+    }
+    return await new Promise((resolve) => {
+      const start = Date.now();
+      const checker = setInterval(() => {
+        const stillAlive = this.bots.filter((b) => b.childProcess);
+        if (stillAlive.length === 0) {
+          clearInterval(checker);
+          logger(true, "INFO", "BOTMANAGER", `stop(): all ${total} child${total === 1 ? "" : "ren"} exited cleanly`);
+          resolve({ exited: total, killed: 0, timedOut: 0 });
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(checker);
+          const names = stillAlive.map((b) => b.name).join(", ");
+          logger(true, "WARN", "BOTMANAGER", `stop(): timeout after ${timeoutMs}ms — killing: ${names}`);
+          for (const b of stillAlive) {
+            try { b.childProcess.kill("SIGKILL"); } catch (_) {}
+          }
+          resolve({ exited: total - stillAlive.length, killed: stillAlive.length, timedOut: stillAlive.length });
+          return;
+        }
+      }, 100);
+    });
   }
 
   loadProfiles() {  // This shoud only run once
@@ -166,6 +202,11 @@ class BotManager {
       }
       this.setBotChildProcess(bot, null);
       //this.deleteBotInstance(bot);
+      if (this.shuttingDown) {
+        // 程序正在關閉,不重啟
+        logger(true, "INFO", "BOTMANAGER", `${bot.name} exited (shutdown, code=${exitCode})`);
+        return;
+      }
       if (exitCode == exitcode.OK) {
         logger(true, "INFO", "BOTMANAGER", `${bot.name} closed successfully`);
       } else if (exitCode >= 2000 || exitCode == exitcode.CONFIG) {  // 通常是設定檔缺失 格式錯誤的
@@ -193,21 +234,28 @@ class BotManager {
     });
     child.on("message", (message) => {
       switch (message.type) {
-        case "logToFile":
+        case "logToFile": {
+          const toFile = message.value.file !== undefined ? !!message.value.file : true;
           if (bot.crtType == "raid")
             logger(
-              true,
+              toFile,
               message.value.type,
               bot.name.substring(0, 4),
               message.value.msg
             );
-          else logger(true, message.value.type, bot.name, message.value.msg);
+          else logger(toFile, message.value.type, bot.name, message.value.msg);
           break;
+        }
         case "setReloadCD":
           this.setBotReloadCD(bot, message.value);
           break;
         case "setStatus":
+          bot.msaAuth = null
           this.setBotStatus(bot, message.value);
+          break;
+        case "msaAuth":
+          bot.msaAuth = { ...message.value, receivedAt: Date.now() }
+          this.handle.emit('msaAuth', bot.name, bot.msaAuth)
           break;
         case "setCrtType":
           this.setBotCrtType(bot, message.value);
@@ -332,6 +380,7 @@ class BotManager {
       tasks: data.tasks,
       runingTask: data.runingTask,
       ping: data.ping,
+      memory: data.memory,
     };
     return botinfo;
   }
