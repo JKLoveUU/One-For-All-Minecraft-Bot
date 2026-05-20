@@ -1,0 +1,13 @@
+diff --git a/node_modules/undici/lib/web/webidl/index.js b/node_modules/undici/lib/web/webidl/index.js
+index 05a6a4b..766925e 100644
+--- a/node_modules/undici/lib/web/webidl/index.js
++++ b/node_modules/undici/lib/web/webidl/index.js
+@@ -389,7 +389,7 @@ webidl.recordConverter = function (keyConverter, valueConverter) {
+ 
+     if (!types.isProxy(O)) {
+       // 1. Let desc be ? O.[[GetOwnProperty]](key).
+-      const keys = [...Object.getOwnPropertyNames(O), ...Object.getOwnPropertySymbols(O)]
++      const keys = Object.getOwnPropertyNames(O)
+ 
+       for (const key of keys) {
+         const keyName = webidl.util.Stringify(key)

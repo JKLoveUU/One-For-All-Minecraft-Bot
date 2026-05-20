@@ -1,0 +1,27 @@
+diff --git a/node_modules/minecraft-protocol/src/client.js b/node_modules/minecraft-protocol/src/client.js
+index e369e77..5d11488 100644
+--- a/node_modules/minecraft-protocol/src/client.js
++++ b/node_modules/minecraft-protocol/src/client.js
+@@ -77,7 +77,7 @@ class Client extends EventEmitter {
+       e.field = [this.protocolState, deserializerDirection].concat(parts).join('.')
+       e.message = e.buffer ? `Parse error for ${e.field} (${e.buffer?.length} bytes, ${e.buffer?.toString('hex').slice(0, 6)}...) : ${e.message}` : `Parse error for ${e.field}: ${e.message}`
+       if (!this.compressor) { this.splitter.pipe(this.deserializer) } else { this.decompressor.pipe(this.deserializer) }
+-      this.emit('error', e)
++      if (e.name !== 'PartialReadError') this.emit('error', e)
+     })
+     this._mcBundle = []
+     const emitPacket = (parsed) => {
+diff --git a/node_modules/minecraft-protocol/src/client/keepalive.js b/node_modules/minecraft-protocol/src/client/keepalive.js
+index a007376..eb399ea 100644
+--- a/node_modules/minecraft-protocol/src/client/keepalive.js
++++ b/node_modules/minecraft-protocol/src/client/keepalive.js
+@@ -15,8 +15,7 @@ module.exports = function (client, options) {
+   function onKeepAlive (packet) {
+     if (timeout) { clearTimeout(timeout) }
+     timeout = setTimeout(() => {
+-      client.emit('error', new Error(`client timed out after ${checkTimeoutInterval} milliseconds`))
+-      client.end('keepAliveError')
++      return
+     }, checkTimeoutInterval)
+     client.write('keep_alive', {
+       keepAliveId: packet.keepAliveId

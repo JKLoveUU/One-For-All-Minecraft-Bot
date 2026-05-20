@@ -73,24 +73,26 @@ mapart 補材料時 分流重啟 多耗時很久
 --- 
 ## Develop
 
-`git clone https://github.com/JKLoveUU/Bot2.git`
+`git clone https://github.com/JKLoveUU/One-For-All-Minecraft-Bot.git`
 
-`cd `
+`cd One-For-All-Minecraft-Bot`
 
 `npm install`
 
 `node .`
-(Node v18.16.0)
+(Node v22+)
 
-有修改 Mineflayer & Protocol 內部分功能
+`npm install` 時會自動透過 `patch-package` 套用 `patches/` 下的修改：
 
-- bot.lookAt() 直接return
-    node_modules\mineflayer\lib\plugins\physics.js
-- swingArm() 直接return
-    node_modules\mineflayer\lib\plugins\entities.js
-- keepAlive Emit Error 部分 return
-    node_modules\minecraft-protocol\src\client\keepalive.js
+| Patch | 說明 |
+|---|---|
+| `mineflayer+4.37.1` | `sendPacketLook()` 直接 return 停用轉頭封包；`bot.lookAt()` / `swingArm()` 直接 return |
+| `minecraft-protocol+1.66.2` | keepAlive timeout 改為 return；`PartialReadError` 不再 emit error |
+| `prismarine-item+1.18.0` | 1.21+ componentMap enchantments 格式相容修正 |
+| `undici+8.3.0` | recordConverter 移除 Symbol keys 修正相容性 |
+
 - [DEV](docs/dev.md)
+
 ### 格式
 若有新功能 仿照src/template.js 和 lib/
 
