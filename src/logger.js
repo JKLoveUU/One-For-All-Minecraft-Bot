@@ -21,13 +21,17 @@ const logTypes = {
 let sink = null;
 function setSink(fn) { sink = fn; }
 
+// Controls whether DEBUG-type messages are printed in non-TUI (no-sink) mode. Default off.
+let showDebug = false;
+function setShowDebug(v) { showDebug = !!v; }
+
 function logger(logToFile = false, type = "INFO", name = "CONSOLE", ...args) {
   const arg = args.join(" ");
 
   // Child mode: forward everything to parent via IPC — parent will format & route.
   if (isChild) {
     try {
-      process.send({ type: "logToFile", value: { type, msg: arg } });
+      process.send({ type: "logToFile", value: { type, msg: arg, file: !!logToFile } });
     } catch (_) {
       // IPC closed (parent gone) — fall through to local print as a last resort.
       process.stderr.write(`[child-log-fallback] ${arg}\n`);
@@ -39,11 +43,12 @@ function logger(logToFile = false, type = "INFO", name = "CONSOLE", ...args) {
   const logType = logTypes[type] || type;
   const nameColor = (name === "BOTMANAGER" || name === "CONSOLE") ? "\x1b[92m" : "\x1b[96m";
   const logMessage = `[${fmtTime}][${logType}][${nameColor}${name}\x1b[0m] ${arg}`;
-  const plainLogMessage = logMessage.replace(/\x1b\[\d+m/g, "");
+  const plainLogMessage = logMessage.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 
   if (sink) {
     try { sink(logMessage, { type, name, plain: plainLogMessage }); } catch (_) {}
   } else {
+    if (type === 'DEBUG' && !showDebug) return;
     process.stdout.write(logMessage + "\n");
   }
   if (logToFile && logFile) {
@@ -61,7 +66,8 @@ function installChildConsoleCapture(defaultType = "INFO") {
       .join(" ")
       .replace(/\r?\n+$/g, "");
     if (!msg.length) return;
-    logger(true, type, "CONSOLE", msg);
+    // Captured console.* output: forward to parent for display but don't persist to log file.
+    logger(false, type, "CONSOLE", msg);
   };
   console.log   = route(defaultType);
   console.info  = route("INFO");
@@ -74,4 +80,35 @@ function safeStringify(obj) {
   try { return JSON.stringify(obj); } catch (_) { return String(obj); }
 }
 
-module.exports = { logger, setSink, installChildConsoleCapture, isChild };
+// 清掉 logs/ 內 mtime 超過 retainDays 的 *.log 檔。
+// retainDays <= 0 視為停用。回傳 {scanned, deleted, skippedActive, error?}。
+// 不會刪當前開啟的 logFile (透過 path 比對排除)。
+function cleanupOldLogs(retainDays = 30) {
+  const result = { scanned: 0, deleted: 0, skippedActive: 0 };
+  try {
+    if (!retainDays || retainDays <= 0) return result;
+    const dir = path.join(projectRoot, "logs");
+    if (!fs.existsSync(dir)) return result;
+    const cutoff = Date.now() - retainDays * 24 * 3600 * 1000;
+    const activePath = logFile && logFile.path ? path.resolve(logFile.path) : null;
+    const files = fs.readdirSync(dir);
+    for (const name of files) {
+      if (!/\.log$/i.test(name)) continue;
+      result.scanned++;
+      const p = path.join(dir, name);
+      try {
+        if (activePath && path.resolve(p) === activePath) { result.skippedActive++; continue; }
+        const stat = fs.statSync(p);
+        if (stat.mtimeMs < cutoff) {
+          fs.unlinkSync(p);
+          result.deleted++;
+        }
+      } catch (_) { /* per-file errors ignored */ }
+    }
+  } catch (e) {
+    result.error = e.message;
+  }
+  return result;
+}
+
+module.exports = { logger, setSink, setShowDebug, installChildConsoleCapture, isChild, cleanupOldLogs };
