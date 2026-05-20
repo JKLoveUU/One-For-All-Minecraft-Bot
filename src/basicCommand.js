@@ -35,6 +35,17 @@ const basicCommand = {
             permissionRequre: 0,
         },
         {
+            name: "task management (list/remove)",
+            identifier: [
+                "task",
+                "tasks"
+            ],
+            execute: cmd_task,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {
             name: "interact",
             identifier: [
                 "interact"
@@ -254,6 +265,16 @@ const basicCommand = {
             longRunning: false,
             permissionRequre: 0,
         },
+        {
+            name: "defer (延遲排隊執行指令)",
+            identifier: [
+                "defer",
+            ],
+            execute: cmd_defer,
+            vaild: true,
+            longRunning: true,
+            permissionRequre: 0,
+        },
     ],
     async init(ctx) {
         const result = await initModule(ctx);
@@ -463,8 +484,10 @@ async function cmd_info(task) {
             if (itemTemplate.stackSize != 1) {
                 logString += `x \x1b[33m${item.count}\x1b[0m `
             } else logString += `\x1b[33m${''.padEnd(4, ' ')}\x1b[0m `
-            if (itemTemplate.enchantCategories != undefined && itemTemplate.enchantCategories.includes('breakable') && item.durabilityUsed != null) {
-                let damagePercentage = Math.round((itemTemplate.maxDurability - item.durabilityUsed) * 1000 / itemTemplate.maxDurability) / 10;
+            const _maxDur = itemTemplate.maxDurability
+            const _used   = item.durabilityUsed ?? 0
+            if (_maxDur > 0 && typeof _used === 'number') {
+                let damagePercentage = Math.round((_maxDur - _used) * 1000 / _maxDur) / 10;
                 if (damagePercentage > 95) logString += `\x1b[32m${damagePercentage}%\x1b[0m `
                 else if (damagePercentage > 50) logString += `\x1b[33m${damagePercentage}%\x1b[0m `
                 else logString += `\x1b[31m${damagePercentage}%\x1b[0m `
@@ -513,6 +536,38 @@ async function cmd_expinfo(task) {
 async function cmd_tasklist(task) {
     console.log(bot.taskManager.tasks)
 }
+// .task list                — 顯示佇列
+// .task remove all          — 清空全部
+// .task remove top          — 移除最前面那筆 (= index 1)
+// .task remove <N>          — 移除 1-indexed 的第 N 筆
+async function cmd_task(task) {
+    const sub = (task.content[1] || '').toLowerCase()
+    if (sub === 'list' || sub === 'ls' || sub === '') {
+        const tm = bot.taskManager
+        const tasks = (tm && tm.tasks) || []
+        if (tasks.length === 0) {
+            logger(false, 'INFO', bot_id, '佇列為空')
+            return
+        }
+        logger(false, 'INFO', bot_id, `佇列共 ${tasks.length} 個任務${tm.tasking ? ' (top 執行中)' : ''}`)
+        tasks.forEach((t, i) => {
+            const tag = (i === 0 && tm.tasking) ? '►' : ' '
+            console.log(`  ${tag} ${(i + 1).toString().padStart(2)} [P${t.priority}] ${t.displayName ?? '<unknown>'} <- ${t.source}`)
+        })
+        return
+    }
+    if (sub === 'remove' || sub === 'rm' || sub === 'cancel') {
+        const target = (task.content[2] || '').toLowerCase()
+        if (!target) {
+            logger(false, 'INFO', bot_id, '用法: .task remove <all|top|N>')
+            return
+        }
+        const result = await bot.taskManager.removeTask(target)
+        logger(false, 'INFO', bot_id, result.message)
+        return
+    }
+    logger(false, 'INFO', bot_id, '用法: .task list | .task remove <all|top|N>')
+}
 async function cmd_throw(task) {
     let targetIndexs = task.content.slice(1).map((str) => parseInt(str))
     if (targetIndexs.length == 0) {
@@ -538,6 +593,30 @@ async function cmd_throwall(task) {
 async function cmd_exit(task) {
     process.send({ type: 'setStatus', value: Status.CLOSED })
     await bot.gkill(0)
+}
+async function cmd_defer(task) {
+    const deferredArgs = task.content.slice(1)
+    if (deferredArgs.length === 0) {
+        logger(false, 'INFO', bot_id, 'defer 用法: defer <指令> [參數...]  例: defer lp set')
+        return
+    }
+    const found = bot.taskManager.isTask(deferredArgs)
+    if (!found.vaild) {
+        logger(false, 'INFO', bot_id, `defer: 找不到指令 "${deferredArgs.join(' ')}"`)
+        return
+    }
+    const deferred = {
+        priority: bot.taskManager.defaultPriority,
+        displayName: found.name,
+        source: task.source,
+        content: deferredArgs,
+        timestamp: Date.now(),
+        sendNotification: false,
+        minecraftUser: task.minecraftUser || '',
+        discordUser: task.discordUser || null,
+    }
+    logger(false, 'INFO', bot_id, `defer: 展開 → ${found.name}  (${deferredArgs.join(' ')})`)
+    await bot.taskManager.assign(deferred, found.longRunning ?? true)
 }
 async function cmd_say(task) {
     let text = task.content.slice(1).join(' ')
@@ -593,7 +672,7 @@ async function cmd_getTopRaidServers(task) {
                 let wd = bot.currentWindow
                 // console.log(wd)
                 // console.log(wd.title)
-                if (!wd.title.includes("綠寶石")) {
+                if (!String(wd.title ?? '').includes("綠寶石")) {
                     rej("錯誤menu")
                 }
                 let tt = Date.now()
