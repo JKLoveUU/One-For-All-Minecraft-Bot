@@ -2,6 +2,15 @@ process.on("uncaughtException", (err) => {
   process.stderr.write(`[FATAL] ${err && err.stack ? err.stack : err}\n`);
   process.exit(1);
 });
+// Suppress DEP0040 (built-in punycode) from deep transitive deps (node-fetch→tr46, protodef→uri-js).
+// process.emitWarning override doesn't work in Node 22; must intercept at process.emit level.
+// Also propagate to child bots via NODE_OPTIONS so their stderr is clean too.
+const _processEmit = process.emit;
+process.emit = function (event, warning) {
+  if (event === "warning" && warning?.code === "DEP0040") return false;
+  return _processEmit.apply(this, arguments);
+};
+process.env.NODE_OPTIONS = ((process.env.NODE_OPTIONS || "") + " --no-deprecation").trim();
 const readline = require("readline");
 const fs = require("fs");
 const path = require("path");
@@ -12,15 +21,22 @@ const config = require(`${baseDir}/config.toml`);
 const rq_general = require(`./bots/generalbot.js`)
 // const rq_raid = require(`./bots/raidbot.js`)
 // const rq_logger = require("./src/logger");
-const { logger } = require("./src/logger");
+const { logger, cleanupOldLogs } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
 const {
   DiscordBotStart,
   DiscordBotStop,
+  sendAuthNotify,
 } = require("./src/modules/discordbot.js");
 
 const botManager = new BotManager();
+botManager.handle.on('msaAuth', (botName, authInfo) => {
+  if (config.discord_setting?.activate) {
+    sendAuthNotify(botName, authInfo.userCode, authInfo.verificationUri).catch(() => {})
+  }
+})
 let rl = null;
+let tuiHandle = null;
 function createReadline() {
   rl = readline.createInterface({
     input: process.stdin,
@@ -34,6 +50,7 @@ function createReadline() {
         ".reload",
         ".ff",
         ".all",
+        ".task",
       ];
       const hits = completions.filter((cmd) => cmd.startsWith(line));
       return [hits.length ? hits : completions, line];
@@ -49,6 +66,14 @@ function checkPaths() {
       fs.mkdirSync(p, { recursive: true });
     }
   });
+  // 啟動時清理過期 log (config.setting.log_retain_days,預設 30 天;設 0 = 停用)
+  const retain = config?.setting?.log_retain_days;
+  const retainDays = Number.isFinite(retain) ? retain : 30;
+  const r = cleanupOldLogs(retainDays);
+  if (r && (r.deleted > 0 || r.error)) {
+    if (r.error) logger(true, "WARN", "CONSOLE", `[Log] cleanupOldLogs error: ${r.error}`);
+    else logger(true, "INFO", "CONSOLE", `[Log] 清理 ${r.deleted}/${r.scanned} 個過期 log (retain=${retainDays}d)`);
+  }
 }
 
 function checkBotValid(bot) {
@@ -112,7 +137,7 @@ function handleCommand(input) {
       selectedBot = botManager.getCurrentBot();
       if (checkBotValid(selectedBot)) {
         selectedBot.childProcess.send({ type: "exit" });
-        process.title = "[Bot][-] type .switch to select a bot";
+        // process.title = "[Bot][-] type .switch to select a bot";
       } else if (selectedBot.reloadCancel) {
         logger(true, "INFO", "CONSOLE", `取消 ${selectedBot.name} 的重啟`);
         clearTimeout(selectedBot.reloadCancel);
@@ -153,6 +178,22 @@ function handleCommand(input) {
         if(bot.childProcess) bot.childProcess.send({ type: "cmd", text: input.slice(5, input.length) });
       })
       break;
+    case "task":
+    case "tasks":
+      // .task list / remove all|top|N — 線上走 child,離線直接改 task.json
+      selectedBot = botManager.getCurrentBot();
+      if (!selectedBot) {
+        console.log("尚未選擇 bot,請先 .switch");
+        break;
+      }
+      if (selectedBot.childProcess) {
+        selectedBot.childProcess.send({ type: "cmd", text: input });
+      } else {
+        handleOfflineTaskCommand(selectedBot, args).catch(err => {
+          logger(true, "ERROR", "CONSOLE", `離線 task 操作失敗: ${err.message}`);
+        });
+      }
+      break;
     default:
       selectedBot = botManager.getCurrentBot();
       if (checkBotValid(selectedBot)) {
@@ -161,6 +202,74 @@ function handleCommand(input) {
       break;
   }
   //   rl.prompt();
+}
+
+// 離線 bot 的 .task list / remove 直接讀寫 config/<bot>/task.json
+async function handleOfflineTaskCommand(bot, args) {
+  const sub = (args[0] || "").toLowerCase();
+  const target = (args[1] || "").toLowerCase();
+  const taskPath = path.join(baseDir, "config", bot.name, "task.json");
+  if (!fs.existsSync(taskPath)) {
+    console.log(`[${bot.name}] (offline) task.json 不存在: ${taskPath}`);
+    return;
+  }
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(taskPath, "utf8"));
+  } catch (e) {
+    console.log(`[${bot.name}] (offline) task.json 解析失敗: ${e.message}`);
+    return;
+  }
+  if (!Array.isArray(data.tasks)) data.tasks = [];
+
+  const writeBack = () => {
+    fs.writeFileSync(taskPath, JSON.stringify(data, null, "\t"));
+  };
+
+  if (sub === "list" || sub === "ls" || sub === "") {
+    if (data.tasks.length === 0) {
+      console.log(`[${bot.name}] (offline) 佇列為空`);
+      return;
+    }
+    console.log(`[${bot.name}] (offline) 佇列共 ${data.tasks.length} 個任務`);
+    data.tasks.forEach((t, i) => {
+      console.log(`    ${(i + 1).toString().padStart(2)} [P${t.priority}] ${t.displayName ?? "<unknown>"} <- ${t.source}`);
+    });
+    return;
+  }
+  if (sub !== "remove" && sub !== "rm" && sub !== "cancel") {
+    console.log("用法: .task list | .task remove <all|top|N>");
+    return;
+  }
+  if (!target) {
+    console.log("用法: .task remove <all|top|N>");
+    return;
+  }
+  if (target === "all" || target === "*") {
+    const removed = data.tasks.length;
+    data.tasks = [];
+    writeBack();
+    console.log(`[${bot.name}] (offline) 已移除全部 ${removed} 個任務`);
+    return;
+  }
+  if (target === "top" || target === "first") {
+    if (data.tasks.length === 0) {
+      console.log(`[${bot.name}] (offline) 無任務可移除`);
+      return;
+    }
+    const removed = data.tasks.shift();
+    writeBack();
+    console.log(`[${bot.name}] (offline) 已移除頂端任務: ${removed?.displayName ?? "<unknown>"}`);
+    return;
+  }
+  const n = parseInt(target, 10);
+  if (Number.isFinite(n) && n >= 1 && n <= data.tasks.length) {
+    const [removed] = data.tasks.splice(n - 1, 1);
+    writeBack();
+    console.log(`[${bot.name}] (offline) 已移除索引 ${n} 任務: ${removed?.displayName ?? "<unknown>"}`);
+    return;
+  }
+  console.log(`[${bot.name}] (offline) 無效目標: ${target} (用 all / top / 1..${data.tasks.length})`);
 }
 
 function addConsoleEventHandler() {
@@ -184,16 +293,41 @@ function addMainProcessEventHandler({ registerSignals = true } = {}) {
 
 async function handleClose() {
   logger(true, "INFO", "CONSOLE", "Closing application...");
-  botManager.stop();
-  const waitingTime = 1000 + botManager.getBotNums() * 200;
+  // Now async — actually waits for all child bots to finish exiting (or timeout-kill them).
+  const result = await botManager.stop();
+  logger(
+    true,
+    "INFO",
+    "CONSOLE",
+    `Bots stopped — exited:${result.exited}  killed:${result.killed}  timedOut:${result.timedOut}`
+  );
   if (config.discord_setting.activate) {
+    const waitingTime = 1000 + botManager.getBotNums() * 200;
     await DiscordBotStop(waitingTime);
   }
-  logger(true, "INFO", "CONSOLE", "Close finished");
+  const uptime = _startTime ? fmtDuration(Date.now() - _startTime) : '?'
+  const statsMsg = `uptime: ${uptime}`
+  logger(true, "INFO", "CONSOLE", `Close finished  ─  ${statsMsg}`)
+  if (tuiHandle) tuiHandle.setPendingOutput(`\n  Close finished  ─  ${statsMsg}\n`)
   process.exit(0);
 }
 
+let _startTime = null
+
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const parts = []
+  if (h) parts.push(`${h}h`)
+  if (m || h) parts.push(`${m}m`)
+  parts.push(`${sec}s`)
+  return parts.join(' ')
+}
+
 function main() {
+  _startTime = Date.now()
   checkPaths();
   logger(
     true,
@@ -206,15 +340,16 @@ function main() {
   if (useTUI) {
     botManager.silentChildren = true;
     const tui = require("./src/modules/tui.js");
-    tui.start(botManager, config, {
+    tuiHandle = tui.start(botManager, config, {
       onCommand: handleCommand,
       onExit: handleClose,
+      startedAt: _startTime,
     });
   } else {
     addConsoleEventHandler();
   }
   if (config.discord_setting.activate) {
-    DiscordBotStart(botManager);
+    DiscordBotStart(botManager, _startTime);
   }
   botManager.updateBestIP();
   setInterval(() => {

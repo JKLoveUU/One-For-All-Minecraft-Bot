@@ -8,6 +8,12 @@ if (!process.argv[2]) {
 }
 // Route all console.* through the shared logger → parent via IPC (must run before other requires).
 require("../src/logger").installChildConsoleCapture();
+// 壓制 punycode DEP0040（child process 各自需要）
+const _processEmit = process.emit;
+process.emit = function (event, warning) {
+    if (event === 'warning' && warning?.code === 'DEP0040') return false;
+    return _processEmit.apply(this, arguments);
+};
 // Adapter: raidbot's existing calls use (logToFile, type, ...args); parent fills in the bot name.
 const _sharedLogger = require("../src/logger").logger;
 function logger(logToFile, type, ...args) {
@@ -25,6 +31,7 @@ const sd = require('silly-datetime');
 //const pcfg = require(`../cfg/profiles.json`)[process.argv[2]]
 const path = require('path');
 const { sleep } = require('../lib/common')
+const mcv = "1.21.11"
 const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
 const profiles = require(`${baseDir}/profiles.json`);
 const commands = []
@@ -174,7 +181,7 @@ const grinde = {
 //test
 //console.log(fcfg.extra)
 if (true) { //config
-  const mcData = require('minecraft-data')("1.18.2")
+  const mcData = require('minecraft-data')(mcv)
   for (const i in grinde.ids.item.trash) {
     if (grinde.ids.item.extra == grinde.ids.item.trash[i]) {
       grinde.ids.item.trash[i] = 'bedrock';
@@ -236,8 +243,15 @@ const bot = (() => { // createMcBot
     port: profiles[process.argv[2]].port,
     username: profiles[process.argv[2]].username,
     auth: "microsoft",
-    version: "1.18.2",
-    viewDistance: 2
+    ...(config?.account?.specifyProfilesFolder ? { profilesFolder: path.resolve(process.cwd(), config.account.specifyProfilesFolder) } : {}),
+    onMsaCode: (res) => {
+      process.send({ type: 'setStatus', value: Status.MSA_AUTH_REQUIRED })
+      process.send({ type: 'msaAuth', value: { userCode: res.user_code, verificationUri: res.verification_uri, expiresIn: res.expires_in } })
+      logger(true, 'INFO', process.argv[2], res.message)
+    },
+    version: mcv,
+    viewDistance: 2,
+    hideErrors: true
   })
 
   bot.once('spawn', async () => {
@@ -316,8 +330,9 @@ const bot = (() => { // createMcBot
     logger(true, 'CHAT', jsonMsg.toString())
   })
   bot.on('kicked', j => {
-    if (j.includes('this proxy')) process.exitCode = 1100//2
-    logger(true, "WARN", `Got kicked. ${j}`)
+    const reasonStr = typeof j === 'string' ? j : require('prismarine-chat')('1.21.11').fromNotch(j).toString();
+    if (reasonStr.includes('this proxy')) process.exitCode = 1100
+    logger(true, "WARN", `Got kicked. ${reasonStr}`)
   })
   bot.on('error', async (error) => {
     if (error?.message?.includes('RateLimiter disallowed request')) {
@@ -333,6 +348,8 @@ const bot = (() => { // createMcBot
     } else if (error?.message?.includes('read ECONNRESET')) {
       process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
       await kill(1903)
+    } else if (error?.name === 'PartialReadError') {
+      return
     }
     console.log('[ERROR]name:\n' + error.name)
     console.log('[ERROR]msg:\n' + error.message)
@@ -382,14 +399,23 @@ process.on('message', async (message) => {
           balance:    botinfo && botinfo.balance!= null ? botinfo.balance    : '-',
           position:   (bot && bot.entity && bot.entity.position) ? bot.entity.position : '-',
           tasks:      _rest,
-          runingTask: _run || '-',
+          runingTask: _run,
           ping:       (bot && bot.player && bot.player.ping != null) ? bot.player.ping : '-',
           memory:     process.memoryUsage(),
         }
       } catch (_) {
-        dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: '-', ping: '-', memory: process.memoryUsage() }
+        dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: null, ping: '-', memory: process.memoryUsage() }
       }
       process.send({ type: 'dataToParent', value: dataRequiredata })
+      break;
+    case 'setChat':
+      enableChat = !!message.value
+      console.log(`聊天功能已${enableChat ? "開啟" : "關閉"}`)
+      break;
+    case 'setDebug':
+      debug = !!message.value
+      if (bot) bot.debugMode = debug
+      console.log(`debug功能已${debug ? "開啟" : "關閉"}`)
       break;
     case 'cmd':
       let args = message.text.slice(1).split(' ')
