@@ -7,7 +7,7 @@ index e369e77..5d11488 100644
        e.message = e.buffer ? `Parse error for ${e.field} (${e.buffer?.length} bytes, ${e.buffer?.toString('hex').slice(0, 6)}...) : ${e.message}` : `Parse error for ${e.field}: ${e.message}`
        if (!this.compressor) { this.splitter.pipe(this.deserializer) } else { this.decompressor.pipe(this.deserializer) }
 -      this.emit('error', e)
-+      if (e.name !== 'PartialReadError') this.emit('error', e)
++      if (e.name !== 'PartialReadError' && !e.message?.includes('array size is abnormally large')) this.emit('error', e)
      })
      this._mcBundle = []
      const emitPacket = (parsed) => {
