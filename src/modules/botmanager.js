@@ -3,12 +3,14 @@ const EventEmitter = require("events");
 const { logger } = require("../logger");
 const { fork } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
 const config = require(`${baseDir}/config.toml`);
 const { exit } = require("process");
 const exitcode = require("./exitcode");
 const { log } = require("console");
 const net = require("net");
+const { printConfigLoadError } = require("../../lib/common");
 // mc 不知道為甚麼不require打包就會漏掉了
 const rq_general = require('../../bots/generalbot.js');
 const rq_raid    = require('../../bots/raidbot.js');
@@ -169,20 +171,26 @@ class BotManager {
       `Reading profile settings from path: ${profilesPath}`
     );
     try {
-      return require(profilesPath);
+      const raw = fs.readFileSync(profilesPath, "utf8");
+      return JSON.parse(raw);
     } catch (err) {
-      console.error(`Fail to read profile settings\nFilePath: ${profilesPath}`);
-      console.error("Please Check The Json Format");
-      console.error(`Error Msg: \x1b[31m${err.message}\x1b[0m`);
-      console.error("You can visit following websites to fix:");
-      console.error(
-        `\x1b[33mhttps://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/JSON_bad_parse\x1b[0m`
-      );
-      console.error(
-        `\x1b[33mhttps://www.google.com/search?q=${encodeURIComponent(
-          err.message
-        )}\x1b[0m`
-      );
+      printConfigLoadError(err, profilesPath, {
+        label: "profiles.json",
+        chatgptFile: "profiles.json",
+        relatedFiles: ["config.toml"],
+        chatgptPrompt: ({ reason, location, rawMessage }) => {
+          const locText = location ? `位置: ${location}` : "位置: 無法判定";
+          return [
+            "請幫我修正 One-For-All 專案的 profiles.json。",
+            "請只修正 JSON 格式或明顯設定錯誤，保留原本 bot/profile 資料結構，不要重寫成新格式。",
+            `錯誤原因: ${reason}`,
+            locText,
+            `Node.js 原始錯誤: ${rawMessage}`,
+            "我會上傳 profiles.json；如果你需要比對自動啟動清單，我再補上 config.toml。",
+          ].join(" ");
+        },
+      });
+      exit(exitcode.CONFIG);
       return null;
     }
   }
