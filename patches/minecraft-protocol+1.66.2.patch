@@ -11,17 +11,3 @@ index e369e77..5d11488 100644
      })
      this._mcBundle = []
      const emitPacket = (parsed) => {
-diff --git a/node_modules/minecraft-protocol/src/client/keepalive.js b/node_modules/minecraft-protocol/src/client/keepalive.js
-index a007376..eb399ea 100644
---- a/node_modules/minecraft-protocol/src/client/keepalive.js
-+++ b/node_modules/minecraft-protocol/src/client/keepalive.js
-@@ -15,8 +15,7 @@ module.exports = function (client, options) {
-   function onKeepAlive (packet) {
-     if (timeout) { clearTimeout(timeout) }
-     timeout = setTimeout(() => {
--      client.emit('error', new Error(`client timed out after ${checkTimeoutInterval} milliseconds`))
--      client.end('keepAliveError')
-+      return
-     }, checkTimeoutInterval)
-     client.write('keep_alive', {
-       keepAliveId: packet.keepAliveId
