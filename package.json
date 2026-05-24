@@ -6,8 +6,8 @@
   "scripts": {
     "postinstall": "patch-package",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "bw": "pkg -t node22-win-x64 index.js -o release/ofa.exe",
-    "bl": "pkg -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" index.js -o ofal/ofa_linux",
+    "bw": "node scripts/prune-mc-data.js && pkg -t node22-win-x64 index.js -o release/ofa.exe",
+    "bl": "node scripts/prune-mc-data.js && pkg -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" index.js -o ofal/ofa_linux",
     "bbw": "pkg index.js -t node22-win-x64 --compress GZip -o release/ofa.exe",
     "bbl": "pkg index.js -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" --compress GZip -o release/ofa_linux"
   },
