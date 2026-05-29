@@ -23,6 +23,7 @@ const rq_general = require(`./bots/generalbot.js`)
 // const rq_logger = require("./src/logger");
 const { logger, cleanupOldLogs } = require("./src/logger");
 const BotManager = require("./src/modules/botmanager.js");
+const { prefixComplete: cmdPrefixComplete } = require("./src/modules/discord/commandIndex");
 const {
   DiscordBotStart,
   DiscordBotStop,
@@ -42,18 +43,17 @@ function createReadline() {
     input: process.stdin,
     output: process.stdout,
     completer: (line) => {
-      const completions = [
-        ".switch",
-        ".list",
-        ".create",
-        ".exit",
-        ".reload",
-        ".ff",
-        ".all",
-        ".task",
+      // Console-level 指令（由 index.js handleCommand 直接處理，不送到 bot child）
+      const consoleCmds = [
+        ".switch", ".list", ".create", ".exit", ".reload", ".ff", ".all", ".task",
       ];
-      const hits = completions.filter((cmd) => cmd.startsWith(line));
-      return [hits.length ? hits : completions, line];
+      // Bot-level 指令（從 cmd 模組的 identifier 動態收集，等同 Discord /command autocomplete）
+      const botCmds = cmdPrefixComplete(line);
+      const consoleHits = consoleCmds.filter(c => c.startsWith(line));
+      const all = consoleHits.concat(botCmds);
+      // 沒匹配時回完整清單，讓使用者看到全部選項
+      const fallback = consoleCmds.concat(cmdPrefixComplete(""));
+      return [all.length ? all : fallback, line];
     },
   });
   return rl;
@@ -120,7 +120,7 @@ function handleCommand(input) {
         console.log(`Usage: .create <botName>`);
         break;
       }
-      checkbot = botManager.getBotByName(args[0])
+      const checkbot = botManager.getBotByName(args[0])
       if (checkbot) {
         botManager.createBot(checkbot.name)
       } else {
@@ -170,7 +170,6 @@ function handleCommand(input) {
       }
       if (!ok) console.log(`Usage: .switch <botName or botID>`);
       const currentBot = botManager.getCurrentBot();
-      process.title = `[Bot][${currentBot.name}] Use .switch to select a bot`;
       console.log(`Current bot: ${currentBot.name}.`);
       break;
     case "all":
@@ -361,8 +360,8 @@ function main() {
   config.account.id.forEach((id) => {
     setTimeout(() => {
       botManager.initBot(id);
-      timerdelay += 200;
     }, timerdelay);
+    timerdelay += 1000;
   });
   //   rl.prompt();
 }

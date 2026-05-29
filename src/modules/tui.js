@@ -299,6 +299,7 @@ function start(botManager, config, callbacks = {}) {
     // ── Shared full-content box for non-Console tabs ──
     const tabContent = blessed.box({
         parent: screen,
+        label: ' Dashboard ',
         top: TABS_H, left: 0,
         width: '100%',
         height: `100%-${TABS_H + CMD_H + STATUS_H}`,
@@ -438,7 +439,7 @@ function start(botManager, config, callbacks = {}) {
 
     const focusSink = blessed.box({
         parent: screen,
-        top: 0, left: 0, width: 0, height: 0, hidden: true,
+        top: 0, left: 0, width: 0, height: 0,
     })
 
     // ── State ──
@@ -665,6 +666,11 @@ function start(botManager, config, callbacks = {}) {
             rows.push(`  {${T.muted}-fg}— bot 未執行 —{/}`)
             rows.push(`  {${T.subtext}-fg}啟動{/} {${T.accent}-fg}.c{/} 或 {${T.accent}-fg}.create ${sel.name}{/}`)
             rows.push(`  {${T.subtext}-fg}重啟{/} {${T.accent}-fg}.reload{/}    {${T.subtext}-fg}終止重啟計時{/} {${T.accent}-fg}.exit{/}`)
+            if (sel.reloadCancel && sel.reloadScheduledAt) {
+                const cd = sel.reloadCD ?? 20_000
+                const remainMs = Math.max(0, sel.reloadScheduledAt + cd - Date.now())
+                rows.push(`  {${T.warning}-fg}自動重啟倒數: ${fmtEta(remainMs)}{/}`)
+            }
             rows.push('')
             // 離線佇列 (從 config/<bot>/task.json 讀)
             if (!offline.ok && offline.err === 'no_file') {
@@ -788,7 +794,8 @@ function start(botManager, config, callbacks = {}) {
     }
     const CA_STATUS_LABEL = {
         tnt:      { text: 'TNT 清理',   col: 'warning' },
-        liquid:   { text: '海綿吸液',   col: 'accent'  },
+        dig:      { text: '挖掘中',     col: 'warning' },
+        liquid:   { text: '封堵液體',   col: 'accent'  },
         obsidian: { text: '黑曜石',     col: 'secondary' },
         restock:  { text: '倉庫補貨',   col: 'accent'  },
         collect:  { text: '回收掉落物', col: 'success' },
@@ -838,11 +845,23 @@ function start(botManager, config, callbacks = {}) {
         const extra = !isMissing(p.vtype)
             ? `   {${T.muted}-fg}vtype ${p.vtype}{/}`
             : ''
-        return [
+        const lines = [
             `  {${T.primary}-fg}{bold}Villager{/bold}{/}  {${T.subtext}-fg}${jobLbl}{/}`,
             `  {${T.subtext}-fg}場地{/} ${place}${extra}`,
             `  {${T.subtext}-fg}狀態{/} {${stColRaw}-fg}${stLbl.text}{/}`,
-        ].join('\n')
+        ]
+        if (detail.job === 'melonpumpkin' || detail.job === 'iron') {
+            if (!isMissing(p.totalEarn)) {
+                const perMin  = isMissing(p.earnPerMin)  ? '-' : p.earnPerMin
+                const perHour = isMissing(p.earnPerHour) ? '-' : p.earnPerHour
+                lines.push(`  {${T.subtext}-fg}收益{/} {${T.success}-fg}${p.totalEarn}{/}  {${T.muted}-fg}~${perMin}/min  ~${perHour}/hr{/}`)
+            }
+            if (!isMissing(p.tradePairs))
+                lines.push(`  {${T.subtext}-fg}交易{/} {${T.accent}-fg}${p.tradePairs}{/}`)
+            if (!isMissing(p.chunkName))
+                lines.push(`  {${T.subtext}-fg}區塊{/} ${p.chunkName}  {${T.muted}-fg}村民 ${isMissing(p.villagerCount) ? '-' : p.villagerCount}{/}`)
+        }
+        return lines.join('\n')
     }
     const BUILD_STATUS_LABEL = {
         init:     { text: '初始化',   col: 'muted'   },
@@ -954,14 +973,15 @@ function start(botManager, config, callbacks = {}) {
                 const buyQty    = live.buyQty    ?? 0
                 const sellQty   = live.sellQty   ?? 0
                 const totalTrips = buyTrips + sellTrips
-                const tripsTxt = `{${T.warning}-fg}買{/} {${T.text}-fg}${buyTrips}趟/${buyQty}個{/}  {${T.success}-fg}賣{/} {${T.text}-fg}${sellTrips}趟/${sellQty}個{/}  {${T.muted}-fg}共${totalTrips}趟{/}`
+                const buySellTxt = `  {${T.warning}-fg}買{/} {${T.text}-fg}${buyTrips}趟/${buyQty}個{/}  {${T.success}-fg}賣{/} {${T.text}-fg}${sellTrips}趟/${sellQty}個{/}`
                 return [
                     headLine,
                     `${wsLineBase}   ${sideTxt}`,
                     `  {${T.subtext}-fg}訂單{/} ${val(order.id)}`,
                     `  {${T.subtext}-fg}買{/} ${buyServerTxt} {${T.text}-fg}${buyWarp}{/}`,
                     `  {${T.subtext}-fg}賣{/} ${sellServerTxt} {${T.text}-fg}${sellWarp}{/}`,
-                    `  {${T.subtext}-fg}剩餘{/} ${remainTxt}   ${tripsTxt}`,
+                    `  {${T.subtext}-fg}剩餘{/} ${remainTxt}   {${T.muted}-fg}共${totalTrips}趟{/}`,
+                    buySellTxt,
                     `  {${T.subtext}-fg}拉霸{/} {${T.success}-fg}${reward}{/}   {${T.subtext}-fg}搬運收益{/} {${profitCol}-fg}${profit}{/}`,
                     `  {${T.subtext}-fg}支出{/} ${cost}   {${T.subtext}-fg}收入{/} ${income}`,
                 ].join('\n')
@@ -970,14 +990,19 @@ function start(botManager, config, callbacks = {}) {
             const itemTxt = order.firstItem
                 ? `${order.firstItem.item} x${order.firstItem.quantity}` + (order.itemCount > 1 ? ` (+${order.itemCount - 1})` : '')
                 : '-'
-            return [
+            const orderLines = [
                 headLine,
                 wsLineBase,
                 `  {${T.subtext}-fg}訂單{/} ${val(order.id)}`,
                 `  {${T.subtext}-fg}類型{/} {${T.muted}-fg}${optTxt}{/}   {${T.subtext}-fg}揀貨區{/} ${val(order.pickingArea)}`,
                 `  {${T.subtext}-fg}物品{/} ${itemTxt}`,
                 `  {${T.subtext}-fg}總量{/} ${val(order.totalQty)}`,
-            ].join('\n')
+            ]
+            if (p.acceptRemaining != null) {
+                const remCol = p.acceptRemaining === 0 ? T.success : T.warning
+                orderLines.push(`  {${T.subtext}-fg}待處理箱{/} {${remCol}-fg}${p.acceptRemaining}{/} {${T.muted}-fg}/ ${p.acceptTotal}{/}`)
+            }
+            return orderLines.join('\n')
         }
 
         // Single-op modes (update / query / withdraw / deposit / sort / dp)
@@ -991,10 +1016,15 @@ function start(botManager, config, callbacks = {}) {
         } else if (!isMissing(p.pickingAreaId)) {
             lines.push(`  {${T.subtext}-fg}揀貨區{/} ${p.pickingAreaId}`)
         }
+        if (p.acceptRemaining != null) {
+            const remCol = p.acceptRemaining === 0 ? T.success : T.warning
+            lines.push(`  {${T.subtext}-fg}待處理箱{/} {${remCol}-fg}${p.acceptRemaining}{/} {${T.muted}-fg}/ ${p.acceptTotal}{/}`)
+        }
         return lines.join('\n')
     }
     function renderClearAreaDetail(detail) {
         if (detail.mode === 'tnt2') return renderClearAreaTnt2Detail(detail)
+        if (detail.mode === 'dig') return renderClearAreaDigDetail(detail)
         const p = detail.payload || {}
         const layer = p.layer || {}
         const overall = p.overall || {}
@@ -1064,6 +1094,51 @@ function start(botManager, config, callbacks = {}) {
             `  {${T.subtext}-fg}Y 範圍{/} ${yRange}${yBounds}`,
             breakdown ? `  {${T.subtext}-fg}狀態{/} ${breakdown}` : null,
             `  {${T.subtext}-fg}網格{/} ${gridStr}  {${T.muted}-fg}${placeLabel}{/}`,
+            `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
+        ].filter(Boolean).join('\n')
+    }
+    function renderClearAreaDigDetail(detail) {
+        const p = detail.payload || {}
+        const overall = p.overall || {}
+        const children = p.children || {}
+        const cell = p.cell || {}
+        const grid = p.grid || {}
+        const cci = p.currentChildIndex || {}
+        const ccp = p.currentChildPos
+        const lbl = CA_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
+        const stColRaw = T[lbl.col] || T.subtext
+        const childrenLine = `${val(children.done)}/${val(children.total)} 完成` +
+            (!isMissing(children.failed) && children.failed > 0 ? `   {${T.error}-fg}失敗{/} ${children.failed}` : '') +
+            (!isMissing(children.remaining) ? `   {${T.subtext}-fg}剩餘{/} ${children.remaining}` : '')
+        const childIdx = (!isMissing(cci.x) && !isMissing(cci.z)) ? `(${cci.x},${cci.z})` : '-'
+        const childPos = ccp ? ` {${T.muted}-fg}@ ${ccp.x},${ccp.y},${ccp.z}{/}` : ''
+        const breakdown = [
+            cell.scan   ? `{${T.muted}-fg}掃{/} ${cell.scan}` : null,
+            cell.dig    ? `{${T.warning}-fg}挖{/} ${cell.dig}` : null,
+            cell.liquid ? `{${T.accent}-fg}液{/} ${cell.liquid}` : null,
+            cell.done   ? `{${T.success}-fg}完{/} ${cell.done}` : null,
+        ].filter(Boolean).join('  ')
+        const gridStr = (!isMissing(grid.x_size) && !isMissing(grid.z_size))
+            ? `${grid.x_size}x${grid.z_size} (${grid.length} 子區)` : '-'
+        const digMs = p.avgDigMs > 0 ? p.avgDigMs : 0
+        const digLabel = digMs > 0
+            ? `cell 間隔 ${fmtEta(digMs)} (n=${val(p.digSamples)})`
+            : `avg ${fmtEta(p.avgChildMs)}/子區`
+        const sb = p.supportblock
+        const bsb = p.borderSupportBlock
+        const sbLine = (!isMissing(sb) || !isMissing(bsb))
+            ? `  {${T.subtext}-fg}封堵{/} {${T.muted}-fg}內{/} ${val(sb)}` +
+              (bsb && bsb !== sb ? `  {${T.muted}-fg}外{/} ${val(bsb)}` : '')
+            : null
+        return [
+            `  {${T.primary}-fg}{bold}ClearArea{/bold}{/} {${T.muted}-fg}挖掘{/}  {${stColRaw}-fg}${lbl.text}{/}`,
+            `  {${T.subtext}-fg}進度{/} ${val(overall.percent)}%  {${T.muted}-fg}~${fmtEta(overall.etaMs)}{/}`,
+            `  {${T.subtext}-fg}子區{/} ${childrenLine}`,
+            `  {${T.subtext}-fg}當前{/} ${childIdx}${childPos}`,
+            breakdown ? `  {${T.subtext}-fg}cell{/} ${breakdown}` : null,
+            `  {${T.subtext}-fg}已挖{/} ${val(p.cellsDug)} 格  {${T.muted}-fg}${digLabel}{/}`,
+            `  {${T.subtext}-fg}網格{/} ${gridStr}`,
+            sbLine,
             `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
         ].filter(Boolean).join('\n')
     }
@@ -1543,6 +1618,10 @@ function start(botManager, config, callbacks = {}) {
     }
 
     function showTab(n) {
+        // Avoid letting hide() rewind focus history to empty. If the history is
+        // empty, neo-blessed may auto-focus label/list child boxes while their
+        // constructor has not initialized position yet.
+        focusSink.focus()
         const isConsole  = n === 1
         const isProfiles = n === 2
         const isHelps    = n === 3
@@ -2016,8 +2095,15 @@ function start(botManager, config, callbacks = {}) {
             appendLog(`{${T.success}-fg}[Discord] token OK — logged in as ${res.tag}{/}`)
             notify(`✓ token 有效 — ${res.tag}`, 'success', 6000)
         } else {
-            appendLog(`{${T.error}-fg}[Discord] token failed — ${res.error}{/}`)
-            notify(`✗ token 失效: ${res.error}`, 'error', 6000)
+            const errMsg = res.error || ''
+            appendLog(`{${T.error}-fg}[Discord] token failed — ${errMsg}{/}`)
+            if (/disallowed intent/i.test(errMsg))
+                appendLog(`{${T.warning}-fg}[Discord] → 請至 Developer Portal > Bot > Privileged Gateway Intents 開啟 Message Content Intent 後重啟程式。{/}`)
+            else if (/invalid token/i.test(errMsg))
+                appendLog(`{${T.warning}-fg}[Discord] → 請確認 token 是 Bot Token（非 Client Secret / Application ID）。可至 Developer Portal > Bot > Reset Token 重新產生。{/}`)
+            else if (/login timeout|timed? ?out/i.test(errMsg))
+                appendLog(`{${T.warning}-fg}[Discord] → 請確認目前環境能連到 discord.com / gateway.discord.gg，是否被防火牆、代理或 DNS 阻擋。{/}`)
+            notify(`✗ token 失效: ${errMsg}`, 'error', 6000)
         }
     }
     async function actionSendDiscordTest() {

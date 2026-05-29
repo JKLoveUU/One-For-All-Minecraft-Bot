@@ -170,6 +170,11 @@ class BotManager {
       "BOTMANAGER",
       `Reading profile settings from path: ${profilesPath}`
     );
+    if (!fs.existsSync(profilesPath)) {
+      fs.writeFileSync(profilesPath, "{}\n", "utf8");
+      logger(true, "INFO", "BOTMANAGER", "profiles.json 不存在，已自動建立空白檔案");
+      return {};
+    }
     try {
       const raw = fs.readFileSync(profilesPath, "utf8");
       return JSON.parse(raw);
@@ -207,6 +212,7 @@ class BotManager {
       if (bot.reloadCancel) { // 取消其他重啟
         clearTimeout(bot.reloadCancel);
         bot.reloadCancel = null;
+        bot.reloadScheduledAt = null;
       }
       this.setBotChildProcess(bot, null);
       //this.deleteBotInstance(bot);
@@ -231,10 +237,12 @@ class BotManager {
           "BOTMANAGER",
           `${bot.name} restart in ${bot.reloadCD / 1000} second`
         );
+        bot.reloadScheduledAt = Date.now();
         bot.reloadCancel = setTimeout(
           () => {
             this.createBot(bot.name);
             bot.reloadCancel = null;
+            bot.reloadScheduledAt = null;
           },
           bot.reloadCD ? bot.reloadCD : config.setting.reconnect_CD
         );
@@ -270,6 +278,10 @@ class BotManager {
           break;
         case "dataToParent":
           this.handle.emit("data", message.value, bot.name);
+          break;
+        case "event":
+          // 通用 child → parent 事件通道；child 端 process.send({ type: 'event', name: '<eventName>', payload: {...} })
+          this.handle.emit("event", { name: message.name, payload: message.payload }, bot.name);
           break;
         default:
           console.log(`Unknown message type ${message.type} from ${bot.name}`);
@@ -398,15 +410,17 @@ class BotManager {
       return null;
     }
     return new Promise((resolve, reject) => {
+      const handler = (data, nm) => {
+        if (name !== nm) return;
+        clearTimeout(timer);
+        this.handle.off("data", handler);
+        resolve(data);
+      };
       const timer = setTimeout(() => {
+        this.handle.off("data", handler);
         reject();
       }, 100);
-      this.handle.once("data", (data, nm) => {
-        if (name === nm) {
-          clearTimeout(timer);
-          resolve(data);
-        }
-      });
+      this.handle.on("data", handler);
       bot.childProcess.send({ type: "dataRequire" });
     });
   }
