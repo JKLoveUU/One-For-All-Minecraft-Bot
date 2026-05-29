@@ -105,6 +105,26 @@ const warehouse = {
             permissionRequre: 0,
         },
         {
+            name: "wms pa (列出揀貨區 / 占用者)",
+            identifier: [
+                "pa",
+            ],
+            execute: listPickingArea,
+            vaild: true,
+            longRunning: false,
+            permissionRequre: 0,
+        },
+        {
+            name: "wms clean <id> (清場揀貨區)",
+            identifier: [
+                "clean",
+            ],
+            execute: cleanPickingArea,
+            vaild: true,
+            longRunning: true,
+            permissionRequre: 0,
+        },
+        {
             name: "wms test",
             identifier: [
                 "test",
@@ -262,6 +282,12 @@ function summarizeOrder(order) {
             count:    typeof ex.transfer_quantity === 'number' ? ex.transfer_quantity : null,
         };
     }
+    if (order.optype === 'update_barrels' && order.extra_info) {
+        result.barrelRange = {
+            start: order.extra_info.start ?? null,
+            end:   order.extra_info.end   ?? null,
+        };
+    }
     return result;
 }
 async function update(task) {
@@ -368,7 +394,52 @@ async function query(task) {
 async function depositPickingArea(task) {
     const pickingAreaId = wms.warehouse_info.pickingArea[0].id
     setWmsDetail(task, 'depositing_picking', { mode: 'single', pickingAreaId, warehouseStatus: wms.warehouse_info?.status })
-    await wms.depositPickingArea(bot, pickingAreaId)
+    const onProgress = (payload) => setWmsDetail(task, 'depositing_picking', payload)
+    await wms.depositPickingArea(bot, pickingAreaId, onProgress)
+    setWmsDetail(task, 'idle')
+}
+async function listPickingArea(task) {
+    // 重新抓一次倉儲設定,確保顯示的是最新 PA(也會觸發座標形狀診斷 log)。
+    await wms.getWarehouseInfo(wms.cfg)
+    let areas = wms.warehouse_info?.pickingArea || []
+    if (areas.length === 0) {
+        logger(false, 'INFO', bot_id, '目前沒有揀貨區 (pickingArea 為空)')
+        return
+    }
+    // wms pa <id>：只顯示指定 PA
+    const filterId = task.content[2]
+    if (filterId) {
+        areas = areas.filter(a => a.id === filterId)
+        if (areas.length === 0) {
+            logger(false, 'INFO', bot_id, `找不到 picking area ${filterId}`)
+            return
+        }
+    }
+    const fmt = (v) => v ? `${v.x},${v.y},${v.z}` : '—'
+    const fmtList = (arr) => (Array.isArray(arr) && arr.length) ? arr.map(fmt).join(' | ') : '(空)'
+    logger(false, 'INFO', bot_id, `===== 揀貨區 (共 ${areas.length}) =====`)
+    for (const a of areas) {
+        const occ = a.occupied_by || a.occupant || (a.lease && a.lease.holder) || '空閒'
+        const loc = a.warp ? `遠程 warp=${a.warp}${a.server ? ` server=${a.server}` : ''}` : '同倉庫區'
+        logger(false, 'INFO', bot_id, `PA ${a.id} | ${loc} | 占用: ${occ}`)
+        if (a.dimension)        logger(false, 'INFO', bot_id, `  dimension: ${a.dimension}`)
+        if (a.arrival_command)  logger(false, 'INFO', bot_id, `  arrival_command: ${a.arrival_command}`)
+        logger(false, 'INFO', bot_id, `  acceptStand: ${fmt(a.acceptStand)}`)
+        logger(false, 'INFO', bot_id, `  accepts(${(a.accepts || []).length}): ${fmtList(a.accepts)}`)
+        logger(false, 'INFO', bot_id, `  rejectStand: ${fmt(a.rejectStand)}`)
+        logger(false, 'INFO', bot_id, `  rejects(${(a.rejects || []).length}): ${fmtList(a.rejects)}`)
+    }
+}
+async function cleanPickingArea(task) {
+    // clean = 清空指定揀貨區(沿用 depositPickingArea);可帶 id,不帶則用第一個 PA。
+    const pickingAreaId = task.content[2] || wms.warehouse_info.pickingArea[0]?.id
+    if (!pickingAreaId) {
+        taskreply(bot, task, '請輸入 picking area id', '請輸入 picking area id', '請輸入 picking area id')
+        return
+    }
+    setWmsDetail(task, 'cleaning_picking', { mode: 'single', pickingAreaId, warehouseStatus: wms.warehouse_info?.status })
+    const onProgress = (payload) => setWmsDetail(task, 'cleaning_picking', payload)
+    await wms.depositPickingArea(bot, pickingAreaId, onProgress)
     setWmsDetail(task, 'idle')
 }
 async function sort(task) {
