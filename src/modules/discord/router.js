@@ -38,8 +38,11 @@ function attachRouter(client) {
                 return cmd.execute(interaction);
             }
 
-            // Buttons / Select menus
-            if (interaction.isMessageComponent && interaction.isMessageComponent()) {
+            // Buttons / Select menus / Modal submits（共用 componentHandlers，依 customId namespace 分派）
+            if (
+                (interaction.isMessageComponent && interaction.isMessageComponent()) ||
+                (interaction.isModalSubmit && interaction.isModalSubmit())
+            ) {
                 const parsed = parseCustomId(interaction.customId);
                 if (!parsed) return notImplementedReply(interaction);
                 logger(true, 'INFO', 'DISCORD', `${parsed.raw} - ${interaction.user.username}`);

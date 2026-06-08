@@ -6,6 +6,7 @@ const NS = {
     BOTMENU: 'botmenu',
     GBCM:    'gbcm',   // general bot control menu
     RBCM:    'rbcm',   // raid bot control menu
+    MCDM:    'mcdm',   // MC 私訊轉發 - 快速回覆按鈕 / 表單
 };
 
 function buildCustomId(ns, action, ...args) {

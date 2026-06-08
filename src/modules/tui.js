@@ -6,6 +6,7 @@ const path = require('path')
 const pkg = require('../../package.json')
 const { setSink, cleanupOldLogs, logger } = require('../logger')
 const discordbot = require('./discordbot')
+const { configPath, profilesPath } = require('./runtimeFiles')
 
 const TOP_H    = 12
 const CMD_H    = 3
@@ -1142,6 +1143,17 @@ function start(botManager, config, callbacks = {}) {
             `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
         ].filter(Boolean).join('\n')
     }
+    // WMS 分工單元的來源行:取代 clear/build detail 的第一行(標題行)。
+    // 形如:  [12m0s] WMS single   [3m0s] ClearArea
+    const WMS_SOURCE_OP_LABEL = { cleararea: 'ClearArea', mapart: 'Mapart', litematic: 'Build' }
+    function fmtWmsSourceLine(detail) {
+        const src = detail.source || {}
+        const upWms = src.wmsStartedAt ? fmtEta(Date.now() - src.wmsStartedAt) : '-'
+        const upOp  = src.opStartedAt  ? fmtEta(Date.now() - src.opStartedAt)  : '-'
+        const modeLbl = src.mode || '-'
+        const opLbl = WMS_SOURCE_OP_LABEL[detail.type] || detail.type || '-'
+        return `  {${T.accent}-fg}[${upWms}]{/} {${T.primary}-fg}{bold}WMS ${modeLbl}{/bold}{/}   {${T.accent}-fg}[${upOp}]{/} {${T.subtext}-fg}${opLbl}{/}`
+    }
     function renderDetail() {
         const sel = botManager.bots[botList.selected]
         if (!sel) {
@@ -1198,7 +1210,8 @@ function start(botManager, config, callbacks = {}) {
         }
         const entry = infoCache[sel.name]
         const data  = (entry && entry.data) || {}
-        const detail = data.runingTask && typeof data.runingTask === 'object' ? data.runingTask.detail : null
+        const running = data.runingTask && typeof data.runingTask === 'object' ? data.runingTask : null
+        const detail = running ? running.detail : null
         if (!detail || typeof detail !== 'object' || !detail.type) {
             detailBox.setContent(`\n  {${T.muted}-fg}No active task detail.{/}`)
             return
@@ -1213,6 +1226,17 @@ function start(botManager, config, callbacks = {}) {
             case 'mapart':     content = renderBuildLikeDetail(detail); break
             default:
                 content = `\n  {${T.muted}-fg}Unknown detail type: ${detail.type}{/}`
+        }
+        // 第一行統一顯示「來源 + 運行時間」:
+        //  - WMS 分工單元(detail 帶 source):兩段式 [WMS整體運行]WMS <mode> [本單元運行]<op>,取代標題行。
+        //  - 其餘所有型別:在既有標題行(已含模組名=來源)前面加上 [運行時間],時間取任務開工 startedAt。
+        const lines = content.split('\n')
+        if (detail.source) {
+            lines[0] = fmtWmsSourceLine(detail)
+            content = lines.join('\n')
+        } else if (running && running.startedAt && lines[0] && lines[0].trim()) {
+            lines[0] = `  {${T.accent}-fg}[${fmtEta(Date.now() - running.startedAt)}]{/} ` + lines[0].replace(/^\s+/, '')
+            content = lines.join('\n')
         }
         detailBox.setContent(content)
     }
@@ -1801,7 +1825,6 @@ function start(botManager, config, callbacks = {}) {
     }
 
     function saveProfilesToDisk() {
-        const profilesPath = path.join(process.cwd(), 'profiles.json')
         try {
             fs.writeFileSync(profilesPath, JSON.stringify(botManager.profiles, null, 2) + '\n', 'utf8')
             appendLog(`{${T.muted}-fg}[Profiles] Saved to profiles.json{/}`)
@@ -1826,7 +1849,6 @@ function start(botManager, config, callbacks = {}) {
     // indentation, and the trailing inline comment on that line. Falls back to inserting
     // a new line under [section] (or creating the section) when the key isn't found.
     function saveTomlValue(section, key, value) {
-        const configPath = path.join(process.cwd(), 'config.toml')
         const formatted = formatTomlValue(value)
         try {
             const text = fs.readFileSync(configPath, 'utf8')

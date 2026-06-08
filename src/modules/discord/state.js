@@ -1,5 +1,4 @@
-const path = require('path');
-const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
+const { runtimeConfig } = require('../runtimeFiles');
 
 const state = {
     client: null,
@@ -7,7 +6,7 @@ const state = {
     startedAt: Date.now(),
     botMenuId: null,
     botDataCache: {},
-    config: require(`${baseDir}/config.toml`),
+    config: runtimeConfig,
 };
 
 module.exports = state;

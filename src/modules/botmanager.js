@@ -4,8 +4,12 @@ const { logger } = require("../logger");
 const { fork } = require("child_process");
 const path = require("path");
 const fs = require("fs");
-const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
-const config = require(`${baseDir}/config.toml`);
+const {
+  runtimeConfig: config,
+  loadProfiles: loadRuntimeProfiles,
+  profilesPath,
+  startProfilesAutoReload,
+} = require("./runtimeFiles");
 const { exit } = require("process");
 const exitcode = require("./exitcode");
 const { log } = require("console");
@@ -22,6 +26,12 @@ class BotManager {
     this.currentBot = null; // Current selected bot instance
     this.handle = new EventEmitter();
     this.profiles = this.loadProfiles();
+    this.profileReloadWatcher = startProfilesAutoReload(this.profiles, {
+      intervalMs: 1000,
+      onError: (err, file) => {
+        logger(true, "ERROR", "BOTMANAGER", `profiles reload failed: ${file}: ${err.message}`);
+      },
+    });
     this.shuttingDown = false;
   }
   getBotByName(name) {
@@ -124,6 +134,7 @@ class BotManager {
   // Returns { exited, killed, timedOut } so callers can log results.
   async stop(timeoutMs = 8000) {
     this.shuttingDown = true;
+    if (this.profileReloadWatcher) this.profileReloadWatcher.stop();
     // Cancel any pending restart timers so we don't fork a new bot mid-shutdown.
     for (const bot of this.bots) {
       if (bot.reloadCancel) {
@@ -163,7 +174,6 @@ class BotManager {
   }
 
   loadProfiles() {  // This shoud only run once
-    const profilesPath = path.join(process.cwd(), "profiles.json");
     logger(
       true,
       "INFO",
@@ -176,8 +186,7 @@ class BotManager {
       return {};
     }
     try {
-      const raw = fs.readFileSync(profilesPath, "utf8");
-      return JSON.parse(raw);
+      return loadRuntimeProfiles();
     } catch (err) {
       printConfigLoadError(err, profilesPath, {
         label: "profiles.json",
@@ -197,6 +206,14 @@ class BotManager {
       });
       exit(exitcode.CONFIG);
       return null;
+    }
+  }
+  broadcastConfig(nextConfig = config) {
+    for (const bot of this.bots) {
+      if (!bot || !bot.childProcess || !bot.childProcess.connected) continue;
+      try {
+        bot.childProcess.send({ type: "configUpdate", config: nextConfig });
+      } catch (_) {}
     }
   }
   /*

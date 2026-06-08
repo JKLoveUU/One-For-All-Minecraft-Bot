@@ -35,6 +35,7 @@ const config = state.config;
 registerComponentHandler(NS.BOTMENU, handleBotmenu);
 registerComponentHandler(NS.GBCM, handleGbcm);
 registerComponentHandler(NS.RBCM, handleRbcm);
+registerComponentHandler(NS.MCDM, mcdmForward.handleMcdm);
 
 // 載入所有 slash command 模組（commands/*.js）
 loadCommands();
@@ -154,12 +155,18 @@ async function initBotMenu() {
     setInterval(async () => {
         try {
             const ch = client.channels.cache.get(config.discord_setting.channelId);
+            if (!ch) {
+                logger(true, 'WARN', 'DISCORD', `botMenu refresh skipped: channel ${config.discord_setting.channelId} not in cache`);
+                return;
+            }
             const oldmenu = await getChannelMsgFetch(ch, state.botMenuId);
             if (oldmenu) {
                 await oldmenu.edit(generateBotMenu());
-            } else {
+            } else if (oldmenu === null) {
                 const replacement = await ch.send(generateBotMenu());
                 state.botMenuId = replacement.id;
+            } else {
+                logger(true, 'WARN', 'DISCORD', 'botMenu refresh skipped: message fetch failed, keeping current botMenuId');
             }
         } catch (err) {
             logger(true, 'ERROR', 'DISCORD', `botMenu refresh error: ${err.message}`);
@@ -167,10 +174,23 @@ async function initBotMenu() {
     }, 30_000);
 }
 
+function isUnknownMessageError(error) {
+    return error && (
+        error.code === 10008 ||
+        error.status === 404 ||
+        /Unknown Message/i.test(String(error.message || error))
+    );
+}
+
 async function getChannelMsgFetch(channel, id) {
+    if (!channel || !id) return null;
     try {
         return await channel.messages.fetch(id, { force: true });
     } catch (error) {
+        if (isUnknownMessageError(error)) {
+            logger(true, 'WARN', 'DISCORD', `getChannelMsgFetch: message ${id} not found`);
+            return null;
+        }
         logger(true, 'ERROR', 'DISCORD', `getChannelMsgFetch: ${error}`);
         return undefined;
     }
