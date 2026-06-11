@@ -1,0 +1,19 @@
+# 統一所有文字檔在 repo 與 working tree 皆為 LF,終結 autocrlf 的 LF/CRLF 警告
+* text=auto eol=lf
+
+# Windows 批次檔必須是 CRLF 才能正確執行
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二進位檔案不做任何轉換
+*.exe binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.gz binary
+*.litematic binary
+*.schematic binary
+*.nbt binary
