@@ -1,14 +1,14 @@
 {
   "name": "one-for-all-mcfallout-bot",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "minecraft bot for mcfallout server",
   "main": "index.js",
   "scripts": {
     "postinstall": "patch-package",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "bw": "node scripts/prune-mc-data.js && pkg -t node22-win-x64 index.js -o release/ofa.exe",
+    "bw": "node scripts/prune-mc-data.js && node scripts/build-win.js",
     "bl": "node scripts/prune-mc-data.js && pkg -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" index.js -o ofal/ofa_linux",
-    "bbw": "pkg index.js -t node22-win-x64 --compress GZip -o release/ofa.exe",
+    "bbw": "node scripts/build-win.js --compress",
     "bbl": "pkg index.js -t node22-linux-x64 --no-bytecode --public --public-packages \"*\" --compress GZip -o release/ofa_linux"
   },
   "repository": {
@@ -20,11 +20,13 @@
     "./bots",
     "./bots/generalbot.js",
     "./bots/raidbot.js",
+    "./defaults",
     "./lib",
     "./src"
   ],
   "pkg": {
     "assets": [
+      "defaults/**/*",
       "node_modules/neo-blessed/usr/**/*"
     ],
     "scripts": [
@@ -52,7 +54,8 @@
   },
   "overrides": {
     "axios": "^1.16.1",
-    "undici": "^8.3.0"
+    "undici": "^8.3.0",
+    "uuid": "^11.1.1"
   },
   "dependencies": {
     "@discordjs/builders": "^1.14.1",
