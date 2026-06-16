@@ -5,9 +5,38 @@ const path = require("path");
 const isChild = typeof process.send === "function";
 
 const projectRoot = path.resolve(__dirname, "..");
-let date = sd.format(new Date(), "YYYY-MM-DD_0");
+
+function currentDateStr(d = new Date()) {
+  return sd.format(d, "YYYY-MM-DD_0");
+}
+// 下一個本地午夜的 epoch(ms)。換日換檔的判斷基準。
+function nextMidnightMs(now = new Date()) {
+  const d = new Date(now);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+}
+
 // In parent: write logs directly to file. In child: parent handles file writes (via IPC).
-const logFile = isChild ? null : fs.createWriteStream(`logs/${date}.log`, { flags: "a" });
+let logFile = isChild ? null : fs.createWriteStream(`logs/${currentDateStr()}.log`, { flags: "a" });
+let nextRollover = isChild ? Infinity : nextMidnightMs();
+
+// 跨日時惰性換檔:由寫入觸發(閒置不開空檔)。每次寫入只多一個整數比較(now < nextRollover),
+// 真的跨日那一刻才重算日期字串、關舊 stream、開新檔。回傳當前可寫的 stream。
+function rollLogFileIfNeeded(now) {
+  if (isChild || logFile == null) return logFile;
+  if (now < nextRollover) return logFile;
+  const old = logFile;
+  try {
+    logFile = fs.createWriteStream(`logs/${currentDateStr(new Date(now))}.log`, { flags: "a" });
+  } catch (_) {
+    // 開新檔失敗 → 續用舊 stream,一分鐘後再試,避免每行重試。
+    nextRollover = now + 60_000;
+    return logFile;
+  }
+  nextRollover = nextMidnightMs(new Date(now));
+  try { old.end(); } catch (_) {}
+  return logFile;
+}
 
 const logTypes = {
   DEBUG: "\x1b[97mDEBUG\x1b[0m",
@@ -39,9 +68,13 @@ function logger(logToFile = false, type = "INFO", name = "CONSOLE", ...args) {
     return;
   }
 
-  const fmtTime = sd.format(new Date(), "YYYY/MM/DD HH:mm:ss");
+  const now = new Date();
+  const fmtTime = sd.format(now, "YYYY/MM/DD HH:mm:ss");
   const logType = logTypes[type] || type;
-  const nameColor = (name === "BOTMANAGER" || name === "CONSOLE") ? "\x1b[92m" : "\x1b[96m";
+  let nameColor;
+  if (name === "BOTMANAGER" || name === "CONSOLE") nameColor = "\x1b[92m";         // bright green
+  else if (name === "DISCORD") nameColor = "\x1b[38;2;88;101;242m";               // Discord blurple #5865F2
+  else nameColor = "\x1b[96m";                                                     // bright yellow (bot names)
   const logMessage = `[${fmtTime}][${logType}][${nameColor}${name}\x1b[0m] ${arg}`;
   const plainLogMessage = logMessage.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 
@@ -52,7 +85,8 @@ function logger(logToFile = false, type = "INFO", name = "CONSOLE", ...args) {
     process.stdout.write(logMessage + "\n");
   }
   if (logToFile && logFile) {
-    logFile.write(plainLogMessage + "\n");
+    const stream = rollLogFileIfNeeded(now.getTime());
+    if (stream) stream.write(plainLogMessage + "\n");
   }
 }
 
