@@ -14,9 +14,17 @@ process.env.NODE_OPTIONS = ((process.env.NODE_OPTIONS || "") + " --no-deprecatio
 const readline = require("readline");
 const fs = require("fs");
 const path = require("path");
-const toml = require("toml-require").install({ toml: require("toml") });
-const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
-const config = require(`${baseDir}/config.toml`);
+require("toml-require").install({ toml: require("toml") });
+const {
+  runtimeDir,
+  runtimeConfig: config,
+  ensureRuntimeFiles,
+  loadConfig,
+  startConfigAutoReload,
+} = require("./src/modules/runtimeFiles");
+ensureRuntimeFiles();
+if (process.cwd() !== runtimeDir) process.chdir(runtimeDir);
+loadConfig(config);
 // mc 不知道為甚麼不require打包就會漏掉了
 const rq_general = require(`./bots/generalbot.js`)
 // const rq_raid = require(`./bots/raidbot.js`)
@@ -31,6 +39,13 @@ const {
 } = require("./src/modules/discordbot.js");
 
 const botManager = new BotManager();
+const configReloadWatcher = startConfigAutoReload(config, {
+  intervalMs: 1000,
+  onReload: () => botManager.broadcastConfig(config),
+  onError: (err, file) => {
+    logger(true, "ERROR", "CONFIG", `Reload failed: ${file}: ${err.message}`);
+  },
+});
 botManager.handle.on('msaAuth', (botName, authInfo) => {
   if (config.discord_setting?.activate) {
     sendAuthNotify(botName, authInfo.userCode, authInfo.verificationUri).catch(() => {})
@@ -207,7 +222,7 @@ function handleCommand(input) {
 async function handleOfflineTaskCommand(bot, args) {
   const sub = (args[0] || "").toLowerCase();
   const target = (args[1] || "").toLowerCase();
-  const taskPath = path.join(baseDir, "config", bot.name, "task.json");
+  const taskPath = path.join(runtimeDir, "config", bot.name, "task.json");
   if (!fs.existsSync(taskPath)) {
     console.log(`[${bot.name}] (offline) task.json 不存在: ${taskPath}`);
     return;
@@ -292,6 +307,7 @@ function addMainProcessEventHandler({ registerSignals = true } = {}) {
 
 async function handleClose() {
   logger(true, "INFO", "CONSOLE", "Closing application...");
+  if (configReloadWatcher) configReloadWatcher.stop();
   // Now async — actually waits for all child bots to finish exiting (or timeout-kill them).
   const result = await botManager.stop();
   logger(
