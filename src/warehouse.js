@@ -2,7 +2,6 @@ const { sleep } = require('../lib/common')
 const { initModule, taskreply } = require('../lib/commandModule')
 const wms = require('../lib/wms/wms')
 const { createDepositIntake } = require('../lib/wms/intake')
-const { isCashierStaff } = require('./modules/runtimeFiles')
 const Status = require('./modules/botstatus');
 const containerOperation = require('../lib/containerOperation');
 const { Vec3 } = require('vec3');
@@ -210,9 +209,10 @@ const warehouse = {
         // 連線 + 權限檢查:running 才註冊;連不上 → 背景持續重試;invalid-token → 直接停。
         // await 第一次嘗試(不卡啟動:error-connect 時 connect 內部改背景重連立即返回)。
         await wms.connect();
-        // 綠寶石入金監聽(server /pay):僅在 deposit_enabled 且此帳號是出納(config.toml cashier_staff)時掛載,
-        // 避免每隻 bot 都監聽處理。連線狀態由監聽內 canServe() 把關,WMS 重連成功即可開始處理入金。
-        if (wms.cfg.deposit_enabled !== false && isCashierStaff(bot.username)) {
+        // 綠寶石入金監聽(server /pay):僅在 deposit_enabled 且此帳號是出納時掛載,避免每隻 bot 都處理。
+        // 出納名單由 WMS 經 warehousegetinfo 下發(wms.isCashier,來源 WMS config.toml api.cashierStaff)。
+        // 連線/出納狀態另由監聽內 canServe()+isCashier 動態把關(WMS 重連、名單變動後也正確)。
+        if (wms.cfg.deposit_enabled !== false && wms.isCashier(bot.username)) {
             createDepositIntake(wms, bot, logger);
         }
     },

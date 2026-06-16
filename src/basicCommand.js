@@ -8,7 +8,7 @@ const mcFallout = require(`../lib/mcFallout`);
 const { sleep, readConfig } = require('../lib/common')
 const { initModule } = require('../lib/commandModule')
 const permission = require('../bots/lib/permission')
-const { runtimeConfig, isCashierStaff } = require('./modules/runtimeFiles')
+const { runtimeConfig } = require('./modules/runtimeFiles')
 const Status = require('./modules/botstatus')
 let logger
 let mcData
@@ -777,14 +777,14 @@ async function cmd_link(task) {
 }
 
 // 出金(錢包提領綠寶石):玩家私訊「出金 <數量>」→ WMS 扣款 → bot /pay 付出綠寶石。
-// 僅出納帳號(config.toml [setting] cashier_staff)受理;先確認 bot 綠寶石夠付,避免扣了錢包卻付不出。
+// 僅出納帳號(WMS config.toml api.cashierStaff,經 warehousegetinfo 下發)受理;先確認 bot 綠寶石夠付,避免扣了錢包卻付不出。
 async function cmd_cashout(task) {
     const wms = require('../lib/wms/wms')
     if (task.source !== 'minecraft-dm') {
         await taskreply(task, '請在遊戲內私訊使用: 出金 <數量>', '出金限私訊使用', null)
         return
     }
-    if (!isCashierStaff(bot.username)) {
+    if (!wms.isCashier(bot.username)) {
         await taskreply(task, '此 bot 不提供出入金服務,請找指定的出納 bot', '非出納帳號,略過出金', null)
         return
     }

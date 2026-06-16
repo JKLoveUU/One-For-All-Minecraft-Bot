@@ -226,14 +226,6 @@ function patchTomlFromDefault(userPath, defaultPath) {
   return added;
 }
 
-// isCashierStaff:此 bot 帳號是否擔任出納(負責綠寶石出入金:監聽入金 + 受理出金)。
-// 讀 config.toml 的 [setting] cashier_staff 清單;空 / 未設 = 不限(所有帳號都處理,向後相容)。
-function isCashierStaff(name) {
-  const list = runtimeConfig && runtimeConfig.setting && runtimeConfig.setting.cashier_staff;
-  if (!Array.isArray(list) || list.length === 0) return true;
-  return list.includes(name);
-}
-
 function replaceObject(target, source) {
   for (const key of Object.keys(target)) delete target[key];
   for (const [key, value] of Object.entries(source || {})) target[key] = value;
@@ -307,5 +299,4 @@ module.exports = {
   startConfigAutoReload,
   startProfilesAutoReload,
   patchTomlFromDefault,
-  isCashierStaff,
 };
