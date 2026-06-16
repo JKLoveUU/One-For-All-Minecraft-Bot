@@ -5,10 +5,11 @@ node_modules/
 ofa.exe
 logs/
 config/
-config.toml
-config.json
-profiles.toml
-profiles.json
+/config.toml
+/profiles.json
+!/defaults/config.toml
+!/defaults/profiles.json
+!/defaults/villager.toml
 dc-js/
 mc-js/
 test/
@@ -16,4 +17,3 @@ ofal/
 release/
 *.exe
 *.zip
-

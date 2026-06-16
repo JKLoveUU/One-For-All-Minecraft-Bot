@@ -1,0 +1,84 @@
+# One-For-All default configuration.
+# This file is copied next to the executable on first launch.
+# Edit the values here to configure the bot.
+
+[discord_setting]
+  # 啟用 Discord Bot 整合（設 true 才會連線 Discord）
+  activate = false
+  # Discord Bot Token（從 Discord Developer Portal 取得）
+  token = ""
+  # Bot 擁有者 Discord 使用者 ID（可用 reply 對 bot 下指令）
+  owners = ""
+  # Discord Bot Application ID（Developer Portal 應用程式 ID）
+  appId = ""
+  # 機器人所在的 Discord 伺服器（Guild）ID
+  guildId = ""
+  # 機器人輸出訊息到的 Discord 頻道 ID
+  channelId = ""
+  # 啟用 Minecraft 私訊 ↔ Discord 雙向轉發
+  enable_MC_DM_Forward = false
+  # 私訊轉發目標頻道 ID（需在同一個 Guild 內，可與 channelId 相同）
+  MC_DM_Forward_channelId = ""
+  # 指定回覆代理 bot（空字串 = 依最近 incoming bot / currentBot 自動選）
+  MC_DM_Forward_proxyBot = ""
+  # 允許操作 bot 的 Discord 使用者 ID 列表
+  whitelist_members = []
+  # 允許操作 bot 的 Discord 身分組 ID 列表
+  whitelist_roles = []
+  # Slash command 可見範圍："guild"（即時生效，推薦）或 "global"（最多 1 小時傳播延遲）
+  slashCommandScope = "guild"
+
+[account]
+  # 要啟動的帳號名稱列表（帳號需先在 profiles.json 內設定 可透過TUI設定）
+  id = []
+  # 選配：指定 Microsoft 授權 cache 存放資料夾；支援相對路徑（相對執行檔目錄）
+  # 不填則預設使用 %APPDATA%/.minecraft/nmp-cache
+  # specifyProfilesFolder = "./authCache"
+
+[setting]
+  # Minecraft 內白名單(使用者名稱)。此清單內的玩家在權限系統中「自動視為 admin 身分組」
+  # (= 擁有所有權限節點),為向後相容保留。若只想給部分權限，請改用下方 [permission.members]
+  # 指定身分組，或用 MC 指令 perm grant 臨時授權。
+  whitelist = []
+  # 斷線後重新連線的冷卻時間（毫秒）
+  reconnect_CD = 20_000
+  # 啟用測試版 TUI 顯示介面（需支援 ANSI 的終端）
+  enableEXPTUI = true
+  # 自動清理多少天前的 log 檔案（設 0 = 停用清理）
+  log_retain_days = 14
+  # 是否從 ips 清單自動選擇延遲最低的伺服器 IP
+  selectBestIP = true
+  # 定期 ping 所有 IP 的時間間隔（毫秒，設 0 = 禁用）
+  CheckPing = 300_000
+  # 當 CheckPing 期間平均延遲超過此值（毫秒）時斷線重連
+  pingThreshold = 500
+  # 可選擇的伺服器 IP 列表（selectBestIP = true 時從此清單挑最低延遲）
+  ips = [
+    "mcfallout.net",
+    "jp.mcfallout.net",
+    "na.mcfallout.net",
+    "proxy-nrt.mcfallout.net"
+  ]
+
+[permission]
+  # 權限系統:玩家的有效權限 = 下列來源的「聯集」
+  #   1) default_group(套用所有人) 2) [permission.members] 指定的組
+  #   3) setting.whitelist 內的玩家 → 自動 admin   4) perm grant 的未過期臨時授權
+  # 套用到「所有玩家」（含未綁定/未授權者）的預設身分組
+  default_group = "guest"
+
+[permission.groups]
+  # 每個身分組 = 允許的權限節點清單。節點 = 「模組.子指令」(如 wms.update、mapart.build)，
+  # 頂層指令則為其名稱(如 tp、info)。支援萬用字元：a.* 命中 a 及 a.xxx；* 命中全部。
+  # default_group 已套用到所有人，trust/admin 會在其之上「疊加」節點。
+  guest = ["version", "aq.info"]
+  trust = ["tpa", "tpahere", "tpc", "warp", "info", "balance", "xp", "find"]
+  admin = ["*"]
+
+# 玩家 → 身分組 對應（可多組）。未列出者只吃 default_group；
+# 既有 setting.whitelist 內的玩家會自動視為 admin（向後相容）；
+# 也可用 MC 指令臨時授權：perm grant <player> <group> <時長，如 2h>。
+# 範例（取消註解後使用）：
+# [permission.members]
+#   Steve = ["admin"]
+#   Alex  = ["trust"]
