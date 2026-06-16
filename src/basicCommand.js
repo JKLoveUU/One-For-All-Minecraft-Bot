@@ -7,6 +7,8 @@ const containerOperation = require(`../lib/containerOperation`);
 const mcFallout = require(`../lib/mcFallout`);
 const { sleep, readConfig } = require('../lib/common')
 const { initModule } = require('../lib/commandModule')
+const permission = require('../bots/lib/permission')
+const { runtimeConfig, isCashierStaff } = require('./modules/runtimeFiles')
 const Status = require('./modules/botstatus')
 let logger
 let mcData
@@ -22,7 +24,6 @@ const basicCommand = {
             execute: cmd_test,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "task list",
@@ -32,7 +33,6 @@ const basicCommand = {
             execute: cmd_tasklist,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "task management (list/remove)",
@@ -43,7 +43,6 @@ const basicCommand = {
             execute: cmd_task,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "interact",
@@ -53,7 +52,6 @@ const basicCommand = {
             execute: cmd_interact,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "click the window",
@@ -63,7 +61,6 @@ const basicCommand = {
             execute: cmd_click,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "usagetree",
@@ -75,7 +72,6 @@ const basicCommand = {
             execute: cmd_help,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "ts",
@@ -86,7 +82,6 @@ const basicCommand = {
             execute: cmd_toServer,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "地鳴宣言",
@@ -99,7 +94,6 @@ const basicCommand = {
             execute: cmd_TheRumbling,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "顯示所有玩家",
@@ -109,7 +103,6 @@ const basicCommand = {
             execute: cmd_playerlist,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "Bot資訊查詢",
@@ -121,7 +114,6 @@ const basicCommand = {
             execute: cmd_info,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "Emerald Withdraw",
@@ -132,7 +124,6 @@ const basicCommand = {
             execute: cmd_payall,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "Balance Query",
@@ -146,7 +137,6 @@ const basicCommand = {
             execute: cmd_balinfo,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "Experience query",
@@ -158,7 +148,6 @@ const basicCommand = {
             execute: cmd_expinfo,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "丟棄物品",
@@ -168,7 +157,6 @@ const basicCommand = {
             execute: cmd_throw,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
                 {
             name: "丟垃圾",
@@ -178,7 +166,6 @@ const basicCommand = {
             execute: cmd_qthrow,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "丟棄所有物品",
@@ -188,7 +175,6 @@ const basicCommand = {
             execute: cmd_throwall,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "say",
@@ -198,7 +184,39 @@ const basicCommand = {
             execute: cmd_say,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
+        },
+        {
+            name: "綁定倉儲帳號",
+            identifier: [
+                "link",
+            ],
+            execute: cmd_link,
+            vaild: true,
+            longRunning: false,
+            perm: "link",
+        },
+        {
+            name: "出金 (錢包提領綠寶石)",
+            identifier: [
+                "出金",
+                "cashout",
+                "提現",
+            ],
+            execute: cmd_cashout,
+            vaild: true,
+            longRunning: false,
+            perm: "cashout",
+        },
+        {
+            name: "權限管理 (grant/revoke/list/groups)",
+            identifier: [
+                "perm",
+                "permission"
+            ],
+            execute: cmd_perm,
+            vaild: true,
+            longRunning: false,
+            perm: "perm",
         },
         {
             name: "warp",
@@ -209,7 +227,6 @@ const basicCommand = {
             execute: cmd_warp,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "tpc",
@@ -219,7 +236,6 @@ const basicCommand = {
             execute: cmd_tpc,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "查詢玩家分流",
@@ -230,7 +246,6 @@ const basicCommand = {
             execute: cmd_findPlayer,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "統計 村民交易 分流",
@@ -243,7 +258,6 @@ const basicCommand = {
             execute: cmd_getTopRaidServers,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "goto",
@@ -253,7 +267,6 @@ const basicCommand = {
             execute: cmd_goto,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "Exit",
@@ -263,7 +276,6 @@ const basicCommand = {
             execute: cmd_exit,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "defer (延遲排隊執行指令)",
@@ -273,7 +285,6 @@ const basicCommand = {
             execute: cmd_defer,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
     ],
     async init(ctx) {
@@ -581,7 +592,7 @@ async function cmd_throw(task) {
 async function cmd_qthrow(task) {
     let throw_whitelist = ["netherite_shovel","netherite_pickaxe","netherite_axe","netherite_sword","netherite_hoe","fishing_rod"]
     for (let i = 9; i <= 45; i++) {
-        c = bot.inventory.slots[i]
+        const c = bot.inventory.slots[i]
         if(c && !throw_whitelist.includes(bot.inventory.slots[i].name)) await containerOperation.throw_slot(bot,i)
     }
 }
@@ -640,7 +651,7 @@ async function cmd_findPlayer(task) {
     let ps = await mcFallout.getPlayerServer(bot, task.content.slice(1));
     //console.log(task)
     //console.log(ps)
-    for (p_index in ps) {
+    for (const p_index in ps) {
         // console.log(p_index)
         if (ps[p_index] != -1) {
             taskreply(task, `Found ${p_index} At ${ps[p_index]}`, `Found ${p_index} At ${ps[p_index]}`, `Found ${p_index} At ${ps[p_index]}`)
@@ -718,7 +729,7 @@ async function cmd_getTopRaidServers(task) {
     }
     if (!fail && tgPlayerList.length > 0) {
         let playerServer_Result = await mcFallout.getPlayerServer(bot, tgPlayerList);
-        for (idx in tgPlayerList) {
+        for (const idx in tgPlayerList) {
             let server = "-";
             if (playerServer_Result[tgPlayerList[idx]] == -1) {
 
@@ -753,6 +764,130 @@ async function cmd_interact(task) {
         insideBlock: false
     })
 }
+// 綁定倉儲帳號:邏輯歸屬 WMS(lib/wms/wms.js linkUser),這裡只做頂層 `link <code>` 別名轉接。
+async function cmd_link(task) {
+    const code = task.content[1]
+    if (!code) {
+        await taskreply(task, "用法: link <驗證碼>", "用法: link <驗證碼>", null)
+        return
+    }
+    const wms = require('../lib/wms/wms')
+    const ok = await wms.linkUser(wms.cfg, task.minecraftUser, code)
+    await taskreply(task, ok ? '連結成功' : '連結失敗', ok ? '連結成功' : '連結失敗', null)
+}
+
+// 出金(錢包提領綠寶石):玩家私訊「出金 <數量>」→ WMS 扣款 → bot /pay 付出綠寶石。
+// 僅出納帳號(config.toml [setting] cashier_staff)受理;先確認 bot 綠寶石夠付,避免扣了錢包卻付不出。
+async function cmd_cashout(task) {
+    const wms = require('../lib/wms/wms')
+    if (task.source !== 'minecraft-dm') {
+        await taskreply(task, '請在遊戲內私訊使用: 出金 <數量>', '出金限私訊使用', null)
+        return
+    }
+    if (!isCashierStaff(bot.username)) {
+        await taskreply(task, '此 bot 不提供出入金服務,請找指定的出納 bot', '非出納帳號,略過出金', null)
+        return
+    }
+    const amount = parseInt(String(task.content[1] || '').replace(/,/g, ''), 10)
+    if (!Number.isFinite(amount) || amount <= 0) {
+        await taskreply(task, '用法: 出金 <數量>(例 出金 1000)', '用法: 出金 <數量>', null)
+        return
+    }
+    const player = task.minecraftUser
+    // 先確認 bot 綠寶石夠付,避免 WMS 扣款後付不出綠寶石(扣了錢包卻沒給幣)。
+    if ((bot.botinfo.balance || 0) < amount) {
+        await taskreply(task, `出納 bot 綠寶石暫時不足(${bot.botinfo.balance}),請稍後再試或減少金額`, '出金: bot 餘額不足', null)
+        return
+    }
+    const mcUUID = (bot.players && bot.players[player] && bot.players[player].uuid) || ''
+    const ref = `wd:${bot.username}:${player}:${amount}:${Date.now()}`
+    let res
+    try {
+        res = await wms.reportWithdraw(player, mcUUID, amount, ref)
+    } catch (e) {
+        logger(true, 'ERROR', process.argv[2], `出金回報失敗: ${e.message}`)
+        await taskreply(task, '出金系統忙線,請稍後再試', '出金系統錯誤', null)
+        return
+    }
+    if (!res || !res.ok) {
+        const reason = res && res.reason
+        const msg = reason === 'not_linked' ? '你的帳號尚未綁定,請先在 Discord /link 綁定'
+            : reason === 'insufficient' ? `錢包餘額不足(目前 ${res.balance})`
+            : '出金失敗'
+        await taskreply(task, msg, `出金失敗: ${reason || 'unknown'}`, null)
+        return
+    }
+    // WMS 已扣款 → 付出綠寶石,並回報錢包餘額。
+    bot.chat(`/pay ${player} ${amount}`)
+    logger(true, 'INFO', process.argv[2], `出金 ${player} ${amount}(錢包餘額 ${res.balance})`)
+    await taskreply(task, `已出金 ${amount} 綠寶石,錢包餘額 ${res.balance}`, `出金 ${player} ${amount}`, null)
+}
+
+// 權限管理(臨時授權,單 bot、有到期、重開仍在)。本指令節點 'perm' → 僅 admin('*')可用。
+async function cmd_perm(task) {
+    const sub = (task.content[1] || '').toLowerCase()
+    const gs = bot.grantStore
+    const groups = (runtimeConfig.permission && runtimeConfig.permission.groups) || {}
+    if (!gs) {
+        await taskreply(task, 'grantStore 未就緒', 'grantStore 未就緒', null)
+        return
+    }
+    if (sub === 'grant') {
+        const player = task.content[2]
+        const group = task.content[3]
+        const durStr = task.content[4]
+        if (!player || !group) {
+            await taskreply(task, '用法: perm grant <player> <group> [時長 30m/2h/1d]', '用法: perm grant <player> <group> [時長 30m/2h/1d]', null)
+            return
+        }
+        if (!groups[group]) {
+            const avail = Object.keys(groups).join(', ')
+            await taskreply(task, `未知身分組 ${group}（可用: ${avail}）`, `未知身分組 ${group}（可用: ${avail}）`, null)
+            return
+        }
+        const ms = permission.parseDuration(durStr)
+        if (durStr && ms == null) {
+            await taskreply(task, `時長格式錯誤: ${durStr}（例 30m/2h/1d）`, `時長格式錯誤: ${durStr}`, null)
+            return
+        }
+        await gs.add(player, group, ms)
+        const note = ms ? durStr : '永久'
+        await taskreply(task, `已授予 ${player} → ${group} (${note})`, `已授予 ${player} → ${group} (${note})`, null)
+        return
+    }
+    if (sub === 'revoke') {
+        const player = task.content[2]
+        if (!player) {
+            await taskreply(task, '用法: perm revoke <player>', '用法: perm revoke <player>', null)
+            return
+        }
+        const n = await gs.revoke(player)
+        await taskreply(task, `已撤銷 ${player} 的 ${n} 筆臨時授權`, `已撤銷 ${player} 的 ${n} 筆臨時授權`, null)
+        return
+    }
+    if (sub === 'list') {
+        const l = gs.list()
+        if (l.length === 0) {
+            await taskreply(task, '無臨時授權', '無臨時授權', null)
+            return
+        }
+        const now = Date.now()
+        const lines = l.map(g => `${g.player} → ${g.group} ${g.expiresAt ? `(剩 ${Math.max(0, Math.round((g.expiresAt - now) / 60000))}m)` : '(永久)'}`)
+        if (task.source === 'minecraft-dm') {
+            for (const ln of lines) bot.chat(`/m ${task.minecraftUser} ${ln}`)
+        } else {
+            console.log(lines.join('\n'))
+        }
+        return
+    }
+    if (sub === 'groups') {
+        const avail = Object.keys(groups).join(', ') || '(無)'
+        await taskreply(task, avail, avail, null)
+        return
+    }
+    await taskreply(task, '用法: perm grant|revoke|list|groups', '用法: perm grant|revoke|list|groups', null)
+}
+
 async function taskreply(task, mc_msg, console_msg, discord_msg) {
     switch (task.source) {
         case 'minecraft-dm':

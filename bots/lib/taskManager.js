@@ -1,6 +1,7 @@
 const fs = require('fs')
 const fsp = require('fs').promises
 const { sleep, readConfig } = require('../../lib/common')
+const { derivePermNode } = require('./permission')
 const Status = require('../../src/modules/botstatus')
 
 function createTaskManager(deps) {
@@ -51,8 +52,10 @@ function createTaskManager(deps) {
         },
         isTask(args) {
             let result
+            let moduleId = null
             for (let fc = 0; fc < this.commands.length && !result; fc++) {
                 if (this.commands[fc].identifier.includes(args[0])) {
+                    moduleId = this.commands[fc].identifier[0]
                     for (let cmd_index = 0; cmd_index < this.commands[fc].cmd.length && !result; cmd_index++) {
                         let args2 = args.slice(1, args.length)[0];
                         if (this.commands[fc].cmd[cmd_index].identifier.includes(args2)) {
@@ -68,10 +71,13 @@ function createTaskManager(deps) {
                 for (let cmd_index = 0; cmd_index < basicCommand.cmd.length && !result; cmd_index++) {
                     if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
                         result = basicCommand.cmd[cmd_index];
+                        moduleId = null   // 頂層 basicCommand 無模組前綴
                     }
                 }
             }
             if (!result) result = { vaild: false };
+            // 權限節點:供 dm handler 做授權判斷(來源已是設定物件,直接掛上不影響執行)。
+            if (result.vaild) result.permNode = derivePermNode(moduleId, result)
             return result
         },
         async execute(task) {
@@ -99,6 +105,9 @@ function createTaskManager(deps) {
                 }
             }
             logger(true, 'INFO', process.argv[2], `execute task ${task.displayName}`)
+            // 指令未匹配(例如預覽版未載入該模組 / 未知指令)時 result 會是 undefined,
+            // 補上 fallback 以免讀 result.vaild 直接拋 TypeError 中斷整個任務迴圈。
+            if (!result) result = { vaild: false }
             if (result.vaild != true) {
                 console.log(task)
                 logger(true, 'ERROR', process.argv[2], `task ${task.displayName} not found`)
@@ -140,6 +149,8 @@ function createTaskManager(deps) {
             process.send({ type: 'setStatus', value: Status.RUNNING_TASK })
             if (sort) this.tasksort()
             let crtTask = this.tasks[0]
+            // 記錄本任務開工時間,供 TUI detail 第一行顯示「運行多久」(所有任務型別通用)。
+            if (crtTask) crtTask.startedAt = Date.now()
             if (getLogin()) await this.save();
             await this.execute(crtTask)
             // 用 indexOf 找回 crtTask 再 splice — 避免「執行中其他指令把 tasks[0] 移除」

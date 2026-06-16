@@ -4,6 +4,7 @@ class Task {
     source = '';
     content = '';
     timestamp = Date.now();
+    startedAt = null;        // 任務實際開工時間 (taskManager.loop 執行前設定);供 TUI 顯示運行時間
     sendNotification = true;
     minecraftUser = '';
     discordUser = null;

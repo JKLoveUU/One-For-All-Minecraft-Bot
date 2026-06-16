@@ -21,14 +21,21 @@ for (let i = 0; i < process.argv.length; i++) {
     }
 }
 let login = false
-let config
 const path = require('path');
+const {
+    runtimeDir,
+    ensureRuntimeFiles,
+    loadConfig,
+    loadProfiles,
+} = require('../src/modules/runtimeFiles');
+ensureRuntimeFiles();
+if (process.cwd() !== runtimeDir) process.chdir(runtimeDir);
+let config = loadConfig();
 const EventEmitter = require('events');
 const mineflayer = require("mineflayer");
 const sd = require('silly-datetime');
 const { sleep, readConfig } = require('../lib/common')
-const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
-const profiles = require(`${baseDir}/profiles.json`);
+const profiles = loadProfiles();
 const fs = require('fs');
 const fsp = require('fs').promises
 let mcv = "1.21.11"
@@ -65,12 +72,16 @@ const { logger } = require("../src/logger");
 const villager = require(`../src/villager`);
 const clearArea = require(`../src/clearArea`);
 const edtool = require(`../src/edtool`);
-// const commands = [mapart, buildtool, autoQuest, warehouse]
-const commands = [mapart, buildtool, autoQuest, warehouse, clearArea, villager, edtool]
+let pre = false
+const commands = pre
+? [mapart, buildtool, autoQuest, warehouse]                                  // 預覽版:不載入 build/farm/vt
+: [mapart, buildtool, autoQuest, warehouse, clearArea, villager, edtool]
 const basicCommand = require(`../src/basicCommand`);
 const utils = require('../lib/util');
 const Status = require('../src/modules/botstatus');
 const Task = require('./lib/Task');
+const permission = require('./lib/permission');
+const grantStore = permission.createGrantStore(process.argv[2]);
 const createChatManager = require('./lib/chatManager');
 const createMapManager = require('./lib/mapManager');
 const createTaskManager = require('./lib/taskManager');
@@ -83,6 +94,12 @@ if (!profiles[process.argv[2]]) {
 if (!fs.existsSync(`config/${process.argv[2]}`)) {
     fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
     console.log(`未發現配置文件 請至 config/${process.argv[2]} 配置`)
+}
+// proxy fail-closed：有設定 proxy 但格式無效時，絕不直連伺服器（避免洩漏真實 IP）
+if (require('../lib/proxy').proxyState(profiles[process.argv[2]].proxy) === 'invalid') {
+    console.log(`profiles 中 ${process.argv[2]} 的 proxy 設定無效，為避免直連洩漏 IP 已中止啟動，請修正後再啟動`)
+    process.send({ type: 'setStatus', value: Status.CLOSED_PROXY_INVALID })
+    process.exit(2002)
 }
 process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
 process.send({ type: 'setStatus', value: Status.LOGGING_IN })
@@ -103,16 +120,21 @@ const botinfo = {
     tabUpdateTime: new Date(),
 }
 const bot = (() => { // createMcBot
-    logger(true, 'INFO', process.argv[2], `Initializing | type: ${process.argv[3]} | IP: ${ip ? ip : profiles[process.argv[2]].host}`)
+    const { makeConnect, describeProxy } = require('../lib/proxy')
+    const _proxy = profiles[process.argv[2]].proxy
+    const _host = ip ? ip : profiles[process.argv[2]].host
+    const _connect = makeConnect(_proxy, { host: _host, port: 25565 })
+    logger(true, 'INFO', process.argv[2], `Initializing | type: ${process.argv[3]} | IP: ${_host}${_connect ? ` | proxy: ${describeProxy(_proxy)}` : ''}`)
     // console.log(ip ? ip : profiles[process.argv[2]].host)
     // console.log(profiles[process.argv[2]].port)
     // console.log(profiles[process.argv[2]].username)
     // console.log(mcv)
     const bot = mineflayer.createBot({
-        host: ip ? ip : profiles[process.argv[2]].host,
+        host: _host,
         port: "25565", //profiles[process.argv[2]].port ?? "25565",
         username: profiles[process.argv[2]].username,
         auth: "microsoft",
+        ...(_connect ? { connect: _connect } : {}),
         ...(config?.account?.specifyProfilesFolder ? { profilesFolder: path.resolve(process.cwd(), config.account.specifyProfilesFolder) } : {}),
         onMsaCode: (res) => {
             process.send({ type: 'setStatus', value: Status.MSA_AUTH_REQUIRED })
@@ -169,6 +191,7 @@ const bot = (() => { // createMcBot
         bot.logger = logger
         bot.gkill = kill;
         bot.botinfo = botinfo;
+        bot.grantStore = grantStore;
         bot.debugMode = debug
         clearTimeout(loginWatchDog)
         clearTimeout(authWatchDog)
@@ -177,7 +200,7 @@ const bot = (() => { // createMcBot
         mapManager.init(bot);
         const botContext = { bot, bot_id: process.argv[2], logger };
         await basicCommand.init(botContext);
-        for (c in commands) {
+        for (const c in commands) {
             await commands[c].init(botContext);
         }
         bot._client.write('client_command', { actionId: 0 })     //fix death bug
@@ -198,6 +221,14 @@ const bot = (() => { // createMcBot
         bot.chatAddPattern(
             /^Summoned to wait by CONSOLE$/,
             'wait'
+        )
+        bot.chatAddPattern(
+            /\[系統\] 伺服器重啟倒數 (\d+) 秒/,
+            'serverCountdown'
+        )
+        bot.chatAddPattern(
+            /伺服器將進行短暫重啟/,
+            'serverRestart'
         )
         login = true
     })
@@ -226,47 +257,50 @@ const bot = (() => { // createMcBot
         let args = jsonMsg.toString().split(' ')
         let playerID = args[0].slice(1, args[0].length);
         let cmds = args.slice(3, args.length);
-        let isTask = taskManager.isTask(cmds)
         if (cmds[0] == '無效的指令') {
             return
         }
-        if (cmds[0] == 'link') {
-            let result = await warehouse.link(playerID, cmds[1])
-            if (result) {
-                bot.chat(`/m ${playerID} 連結成功`)
-            } else {
-                bot.chat(`/m ${playerID} 連結失敗`)
+        // 該玩家的有效權限節點(預設組 ∪ members ∪ 既有 whitelist→admin ∪ 未過期臨時授權)
+        const nodes = permission.resolveNodes(playerID, config, grantStore)
+        // reload 非註冊指令,維持特例;改用 'reload' 節點(admin 的 '*' 涵蓋)判斷
+        if (cmds[0] == 'reload') {
+            if (permission.hasPermission(nodes, 'reload')) {
+                bot.chat(`/m ${playerID} 正在重新載入`)
+                process.send({ type: 'setStatus', value: Status.RESTARTING })
+                await kill(75)
+                return
             }
-            return
+            // 無權 → 落到下方「非指令」分支轉發
         }
-        if (cmds[0] == 'reload' && config.setting.whitelist.includes(playerID)) {
-            bot.chat(`/m ${playerID} 正在重新載入`)
-            process.send({ type: 'setStatus', value: Status.RESTARTING })
-            await kill(75)
-            return
-        }
-        if (!config.setting.whitelist.includes(playerID)) {
+        let isTask = taskManager.isTask(cmds)
+        if (isTask.vaild) {
+            if (permission.hasPermission(nodes, isTask.permNode)) {
+                let tk = new Task(taskManager.defaultPriority, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
+                taskManager.assign(tk, isTask.longRunning)
+            } else {
+                bot.chat(`/m ${playerID} 權限不足`)
+                logger(true, 'INFO', process.argv[2], `\x1b[31m拒絕\x1b[0m ${playerID} 指令 ${cmds.join(' ')} (需要 ${isTask.permNode})`)
+            }
             logger(true, 'CHAT', process.argv[2], jsonMsg.toString())
             return
         }
-        if (isTask.vaild) {
-            let tk = new Task(taskManager.defaultPriority, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
-            taskManager.assign(tk, isTask.longRunning)
-            // console.log(taskManager.isImm(cmds))
-        } else {
-            bot.chat(`/m ${playerID} 無效的指令 輸入 help 查看幫助 若要轉發消息使用 say <text>`)
-            // enableChat = !enableChat
+        // 非指令 → 當作 dm 轉發到 Discord(略過自己送出的 outgoing whisper)
+        if (playerID !== bot.username && playerID !== '您') {
+            try {
+                process.send({ type: 'event', name: 'mcWhisper', payload: { from: playerID, text: cmds.join(' ') } })
+            } catch (_) {}
         }
-        //console.log(jsonMsg.toString())
         logger(true, 'CHAT', process.argv[2], jsonMsg.toString())
     })
     bot.on('tpa', p => {
-        bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', process.argv[2], `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
+        const ok = permission.hasPermission(permission.resolveNodes(p, config, grantStore), 'tpa')
+        bot.chat(ok ? '/tpaccept' : '/tpdeny')
+        logger(true, 'INFO', process.argv[2], `${ok ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
     })
     bot.on('tpahere', p => {
-        bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-        logger(true, 'INFO', process.argv[2], `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
+        const ok = permission.hasPermission(permission.resolveNodes(p, config, grantStore), 'tpahere')
+        bot.chat(ok ? '/tpaccept' : '/tpdeny')
+        logger(true, 'INFO', process.argv[2], `${ok ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
     })
     bot._client.on('playerlist_header', () => {
         botTabhandler()
@@ -305,8 +339,10 @@ const bot = (() => { // createMcBot
     })
     //---------------
     bot.on('error', async (error) => {
+        // 調整重登時間 避免觸發風控 或 封禁
+        process.send({ type: 'setReloadCD', value: 60_000 })
         if (error?.message?.includes('RateLimiter disallowed request')) {
-            process.send({ type: 'setReloadCD', value: 60_000 })
+            process.send({ type: 'setReloadCD', value: 180_000 })
             process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
             await kill(1900)
         } else if (error?.message?.includes('Failed to obtain profile data for')) {
@@ -316,6 +352,10 @@ const bot = (() => { // createMcBot
             process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
             await kill(1902)
         } else if (error?.message?.includes('read ECONNRESET')) {
+            process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
+            await kill(1903)
+        } else if (error?.message?.includes('client timed out')) {
+            process.send({ type: 'setReloadCD', value: 10_000 })
             process.send({ type: 'setStatus', value: Status.RELOAD_COOLDOWN })
             await kill(1903)
         } else if (error?.name === 'PartialReadError') {
@@ -364,6 +404,26 @@ const bot = (() => { // createMcBot
         logger(true, 'INFO', process.argv[2], `was sent to waiting room`)
         await kill(11)
     })
+    let serverRestartPending = false
+    bot.on('serverCountdown', async (n) => {
+        if (parseInt(n) <= 5 && !serverRestartPending) {
+            serverRestartPending = true
+            process.send({ type: 'setReloadCD', value: 120_000 })
+            process.send({ type: 'setStatus', value: Status.SERVER_RELOADING })
+            try { await require('../lib/wms/wms').afk.release(bot); } catch (_) { }
+            logger(true, 'INFO', process.argv[2], `server restart countdown ${n}s, disconnecting`)
+            await kill(11)
+        }
+    })
+    bot.on('serverRestart', async () => {
+        if (serverRestartPending) return
+        serverRestartPending = true
+        process.send({ type: 'setReloadCD', value: 120_000 })
+        process.send({ type: 'setStatus', value: Status.SERVER_RELOADING })
+        try { await require('../lib/wms/wms').afk.release(bot); } catch (_) { }
+        logger(true, 'INFO', process.argv[2], `server restart imminent, disconnecting`)
+        await kill(11)
+    })
     //init()
     return bot
 })()
@@ -371,6 +431,15 @@ const bot = (() => { // createMcBot
 async function kill(code = 9) {
     //process.send({ type: 'restartcd', value: restartcd })
     //logger(true, 'WARN', process.argv[2], `exiting in status ${code}`)
+    // 先把正在執行的 WMS 訂單退回後端,再結束。process.exit 是同步的,不先 await 的話
+    // 'end' handler 內的 disconnect HTTP 會被切斷,導致訂單卡在後端直到 watchdog 逾時。
+    // 用 timeout 包住,避免關機被網路卡死(最多等 3 秒)。
+    try {
+        await Promise.race([
+            require('../lib/wms/wms').releaseActiveOrder(),
+            sleep(3000),
+        ])
+    } catch (_) { }
     bot.end()
     process.exit(code)
 }
@@ -423,6 +492,10 @@ process.on('message', async (message) => {
         case 'init':
             config = message.config;
             break;
+        case 'configUpdate':
+            config = message.config || loadConfig();
+            process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
+            break;
         case 'dataRequire':
             try {
                 const _tm = (typeof taskManager !== 'undefined') ? taskManager : null;
@@ -439,9 +512,13 @@ process.on('message', async (message) => {
                     runingTask: _run,
                     ping: (bot && bot.player && bot.player.ping != null) ? bot.player.ping : '-',
                     memory: process.memoryUsage(),
+                    traffic: (() => {
+                        const s = bot && bot._client && bot._client.socket;
+                        return { rx: (s && s.bytesRead) || 0, tx: (s && s.bytesWritten) || 0 };
+                    })(),
                 }
             } catch (_) {
-                dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: null, ping: '-', memory: process.memoryUsage() }
+                dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: null, ping: '-', memory: process.memoryUsage(), traffic: { rx: 0, tx: 0 } }
             }
             process.send({ type: 'dataToParent', value: dataRequiredata })
             break;
@@ -489,6 +566,7 @@ process.on('message', async (message) => {
             break;
         case 'exit':
             process.send({ type: 'setStatus', value: Status.CLOSED })
+            try { await require('../lib/wms/wms').afk.release(bot); } catch (_) { }
             await kill(0)
             break;
         default:

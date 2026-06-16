@@ -22,20 +22,29 @@ function logger(logToFile, type, ...args) {
 let debug = process.argv.includes("--debug");
 let enableChat = process.argv.includes("--chat");
 let login = false
-let config
+const path = require('path');
+const {
+  runtimeDir,
+  ensureRuntimeFiles,
+  loadConfig,
+  loadProfiles,
+} = require('../src/modules/runtimeFiles');
+ensureRuntimeFiles();
+if (process.cwd() !== runtimeDir) process.chdir(runtimeDir);
+let config = loadConfig();
 const mineflayer = require('mineflayer');
 const CNTA = require('chinese-numbers-to-arabic');
 const fs = require('fs')
 const fsp = require('fs').promises
 const sd = require('silly-datetime');
 //const pcfg = require(`../cfg/profiles.json`)[process.argv[2]]
-const path = require('path');
 const { sleep } = require('../lib/common')
 const mcv = "1.21.11"
-const baseDir = process.pkg ? path.dirname(process.execPath) : process.cwd();
-const profiles = require(`${baseDir}/profiles.json`);
+const profiles = loadProfiles();
 const commands = []
 const basicCommand = require(`../src/basicCommand`)
+const permission = require('./lib/permission')
+const grantStore = permission.createGrantStore(process.argv[2])
 const Status = require('../src/modules/botstatus')
 let pcfg = {
   "farm": ["ExampleFarm1"],
@@ -49,6 +58,12 @@ if (!profiles[process.argv[2]]) {
   console.log(`profiles中無 ${process.argv[2]} 資料`)
   process.send({ type: 'setStatus', value: Status.CLOSED_PROFILE_NOT_FOUND })
   process.exit(2001)
+}
+// proxy fail-closed：有設定 proxy 但格式無效時，絕不直連伺服器（避免洩漏真實 IP）
+if (require('../lib/proxy').proxyState(profiles[process.argv[2]].proxy) === 'invalid') {
+  console.log(`profiles 中 ${process.argv[2]} 的 proxy 設定無效，為避免直連洩漏 IP 已中止啟動，請修正後再啟動`)
+  process.send({ type: 'setStatus', value: Status.CLOSED_PROXY_INVALID })
+  process.exit(2002)
 }
 if (!fs.existsSync(`config/${process.argv[2]}`)) {
   fs.mkdirSync(`config/${process.argv[2]}`, { recursive: true });
@@ -236,13 +251,17 @@ if (true) { //config
 }
 
 const bot = (() => { // createMcBot
-  logger(true, "INFO", `Logging into minecraft... ${pcfg.farm[0]} ${fcfg.displayName}`)
+  const { makeConnect, describeProxy } = require('../lib/proxy')
+  const _proxy = profiles[process.argv[2]].proxy
+  const _connect = makeConnect(_proxy, { host: profiles[process.argv[2]].host, port: profiles[process.argv[2]].port })
+  logger(true, "INFO", `Logging into minecraft... ${pcfg.farm[0]} ${fcfg.displayName}${_connect ? ` | proxy: ${describeProxy(_proxy)}` : ''}`)
 
   const bot = mineflayer.createBot({
     host: profiles[process.argv[2]].host,
     port: profiles[process.argv[2]].port,
     username: profiles[process.argv[2]].username,
     auth: "microsoft",
+    ...(_connect ? { connect: _connect } : {}),
     ...(config?.account?.specifyProfilesFolder ? { profilesFolder: path.resolve(process.cwd(), config.account.specifyProfilesFolder) } : {}),
     onMsaCode: (res) => {
       process.send({ type: 'setStatus', value: Status.MSA_AUTH_REQUIRED })
@@ -257,6 +276,7 @@ const bot = (() => { // createMcBot
   bot.once('spawn', async () => {
     logger(true, "INFO", `Logged into minecraft as ${bot.username}.`)
     bot.botinfo = botinfo;
+    bot.grantStore = grantStore;
     const botContext = { bot, bot_id: process.argv[2], logger };
     await basicCommand.init(botContext);
     taskManager.init();
@@ -289,12 +309,14 @@ const bot = (() => { // createMcBot
   bot.on(enableChat ? 'messagestr' : 'dm', logger)
 
   bot.on('tpa', p => {
-    bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
+    const ok = permission.hasPermission(permission.resolveNodes(p, config, grantStore), 'tpa')
+    bot.chat(ok ? '/tpaccept' : '/tpdeny')
+    logger(true, 'INFO', `${ok ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpa request`);
   })
   bot.on('tpahere', p => {
-    bot.chat(config.setting.whitelist.includes(p) ? '/tpaccept' : '/tpdeny')
-    logger(true, 'INFO', `${config.setting.whitelist.includes(p) ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
+    const ok = permission.hasPermission(permission.resolveNodes(p, config, grantStore), 'tpa')
+    bot.chat(ok ? '/tpaccept' : '/tpdeny')
+    logger(true, 'INFO', `${ok ? "\x1b[32mAccept\x1b[0m" : "\x1b[31mDeny\x1b[0m"} ${p}'s tpahere request`);
   })
   bot.on('wait', async () => {
     process.send({ type: 'setReloadCD', value: 120_000 })
@@ -315,16 +337,13 @@ const bot = (() => { // createMcBot
     let playerID = args[0].slice(1, args[0].length);
     let cmds = args.slice(3, args.length);
     let isTask = taskManager.isTask(cmds)
-    if (!config.setting.whitelist.includes(playerID)) {
-      logger(true, 'CHAT', jsonMsg.toString())
-      return
-    }
-    if (isTask.vaild) {
+    const nodes = permission.resolveNodes(playerID, config, grantStore)
+    if (isTask.vaild && permission.hasPermission(nodes, isTask.permNode)) {
       let tk = new Task(10, isTask.name, 'minecraft-dm', cmds, undefined, undefined, playerID, undefined)
       taskManager.assign(tk, isTask.longRunning)
       // console.log(taskManager.isImm(cmds))
-    } else {
-      bot.chat(`/m ${playerID} 無效的指令 輸入.help 查看幫助 若要轉發消息使用 say <text>`)
+    } else if (isTask.vaild) {
+      bot.chat(`/m ${playerID} 權限不足`)
     }
     //console.log(jsonMsg.toString())
     logger(true, 'CHAT', jsonMsg.toString())
@@ -386,6 +405,10 @@ process.on('message', async (message) => {
     case 'init':
       config = message.config;
       break;
+    case 'configUpdate':
+      config = message.config || loadConfig();
+      process.send({ type: 'setReloadCD', value: config?.setting?.reconnect_CD ? config.setting.reconnect_CD : 20_000 })
+      break;
     case 'dataRequire':
       try {
         const _tm    = (typeof taskManager !== 'undefined') ? taskManager : null;
@@ -402,9 +425,13 @@ process.on('message', async (message) => {
           runingTask: _run,
           ping:       (bot && bot.player && bot.player.ping != null) ? bot.player.ping : '-',
           memory:     process.memoryUsage(),
+          traffic:    (() => {
+            const s = bot && bot._client && bot._client.socket;
+            return { rx: (s && s.bytesRead) || 0, tx: (s && s.bytesWritten) || 0 };
+          })(),
         }
       } catch (_) {
-        dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: null, ping: '-', memory: process.memoryUsage() }
+        dataRequiredata = { name: '-', server: '-', coin: '-', balance: '-', position: '-', tasks: [], runingTask: null, ping: '-', memory: process.memoryUsage(), traffic: { rx: 0, tx: 0 } }
       }
       process.send({ type: 'dataToParent', value: dataRequiredata })
       break;
@@ -862,6 +889,7 @@ class Task {
   source = '';
   content = '';
   timestamp = Date.now();
+  startedAt = null;        // 任務實際開工時間 (loop 執行前設定);供 TUI 顯示運行時間
   sendNotification = true;
   //bot-DM
   minecraftUser = '';
@@ -931,8 +959,10 @@ const taskManager = {
   },
   isTask(args) {
     let result
+    let moduleId = null
     for (let fc = 0; fc < commands.length && !result; fc++) {
       if (commands[fc].identifier.includes(args[0])) {
+        moduleId = commands[fc].identifier[0]
         for (let cmd_index = 0; cmd_index < commands[fc].cmd.length && !result; cmd_index++) {
           let args2 = args.slice(1, args.length)[0];
           if (commands[fc].cmd[cmd_index].identifier.includes(args2)) {
@@ -949,10 +979,12 @@ const taskManager = {
         //console.log(args[0],basicCommand.cmd[cmd_index].identifier)
         if (basicCommand.cmd[cmd_index].identifier.includes(args[0])) {
           result = basicCommand.cmd[cmd_index];
+          moduleId = null
         }
       }
     }
     if (!result) result = { vaild: false };
+    if (result.vaild) result.permNode = permission.derivePermNode(moduleId, result)
     return result
     //return false
   },
@@ -1005,6 +1037,8 @@ const taskManager = {
     this.tasking = true;
     this.tasksort()
     let crtTask = this.tasks[0]
+    // 記錄本任務開工時間,供 TUI detail 第一行顯示「運行多久」。
+    if (crtTask) crtTask.startedAt = Date.now()
     if (login) await this.save();
     await this.execute(crtTask)
     this.tasks.shift()
@@ -1047,7 +1081,7 @@ function botTabhandler(tab) {
   let serverIdentifier = -1;
   let coinIdentifier = -1;
   let balanceIdentifier = -1;
-  for (i in header) {
+  for (const i in header) {
     if (header[i].text == '所處位置 ') {            //+2
       serverIdentifier = parseInt(i);            // 不知道為啥之前用parseInt
     } else if (header[i].text == '村民錠餘額') {    //+2

@@ -18,7 +18,11 @@ const template = {
             execute: test,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
+            // 權限節點:未設 perm 時自動衍生為「模組identifier[0].cmd.identifier[0]」,
+            // 此例即 "template.test"。要授權給某身分組,在 config.toml 的
+            // [permission.groups] 裡列入該節點(支援 template.* / * 萬用字元)。
+            // 需要自訂節點時才覆寫,例如多個指令共用權限:
+            // perm: "template.test",
         }
     ],
     async init(ctx) {

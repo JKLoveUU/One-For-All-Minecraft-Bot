@@ -1,6 +1,8 @@
 const { sleep } = require('../lib/common')
 const { initModule, taskreply } = require('../lib/commandModule')
 const wms = require('../lib/wms/wms')
+const { createDepositIntake } = require('../lib/wms/intake')
+const { isCashierStaff } = require('./modules/runtimeFiles')
 const Status = require('./modules/botstatus');
 const containerOperation = require('../lib/containerOperation');
 const { Vec3 } = require('vec3');
@@ -25,6 +27,43 @@ function setWmsDetail(task, status, payload = {}) {
     };
 }
 
+// 從 executeOrder 的回傳值萃取搬運統計,組成 finish 的 payload。
+// 只有 transfer 訂單會帶 stats;其餘訂單回傳沒有 stats → 回空物件,finish 行為不變。
+function transferStatsExtra(execRes) {
+    const s = execRes && execRes.stats;
+    if (!s) return {};
+    return {
+        transfer_moved: s.sellQty || 0,
+        transfer_cost: s.totalCost || 0,
+        transfer_income: s.totalIncome || 0,
+    };
+}
+
+// 建立給 wms.executeOrder 的 onProgress。
+//  - 一般訂單(deposit/withdraw/...):payload 直接 merge 進 WMS detail(type:'warehouse')。
+//  - 分工單元(build/clear):worker 會把整張子 detail(type:litematic/mapart/cleararea)透傳上來,
+//    這裡直接把它設成 task.detail,並掛上 WMS 來源資訊(整體運行時間 + 本單元運行時間),
+//    讓 TUI 渲染出 clear/build 自己的細節,第一行則改顯示來源與時間。
+//  source: { mode: 'single' | 'running', wmsStartedAt }
+function makeOnProgress(task, source) {
+    return (payload) => {
+        if (payload && payload.subDetail) {
+            task.detail = {
+                ...payload.subDetail,
+                source: {
+                    name: 'WMS',
+                    mode: source.mode,
+                    wmsStartedAt: source.wmsStartedAt,   // 整段 WMS 任務起算(running 模式跨多單仍連續)
+                    opStartedAt: payload.opStartedAt,    // 本 clear/build 單元起算
+                },
+            };
+        } else {
+            // 子 detail 尚未產生(剛開工)或非分工單元 → 照常寫 WMS detail。
+            setWmsDetail(task, 'executing', payload);
+        }
+    };
+}
+
 const warehouse = {
     identifier: [
         "wms",
@@ -39,7 +78,6 @@ const warehouse = {
             execute: update,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms query",
@@ -50,7 +88,6 @@ const warehouse = {
             execute: query,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "wms withdraw",
@@ -61,7 +98,6 @@ const warehouse = {
             execute: withdraw,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms order",
@@ -81,7 +117,6 @@ const warehouse = {
             execute: deposit,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms sort",
@@ -92,7 +127,6 @@ const warehouse = {
             execute: sort,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms deposit pickingarea",
@@ -102,7 +136,6 @@ const warehouse = {
             execute: depositPickingArea,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms pa (列出揀貨區 / 占用者)",
@@ -112,7 +145,6 @@ const warehouse = {
             execute: listPickingArea,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "wms clean <id> (清場揀貨區)",
@@ -122,7 +154,6 @@ const warehouse = {
             execute: cleanPickingArea,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms test",
@@ -133,7 +164,6 @@ const warehouse = {
             execute: test,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "wms debug (open a barrel and dump parseItem + 預期處理)",
@@ -143,7 +173,6 @@ const warehouse = {
             execute: debug,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms run",
@@ -154,7 +183,6 @@ const warehouse = {
             execute: run,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "wms stop",
@@ -165,7 +193,6 @@ const warehouse = {
             execute: stop,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         }
     ],
     async init(ctx) {
@@ -180,9 +207,13 @@ const warehouse = {
         // bot_name is the key used by /api/v1/order to match config.storage.staff (wmsapi.md §2.1).
         wms.bot_name = bot.username;
         wms.setLogger(logger);
-        wms.warehouse_info = await wms.getWarehouseInfo(wms.cfg);
-        if (wms.warehouse_info.status == 'running') {
-            logger(true, 'INFO', `全物品 加載成功`);
+        // 連線 + 權限檢查:running 才註冊;連不上 → 背景持續重試;invalid-token → 直接停。
+        // await 第一次嘗試(不卡啟動:error-connect 時 connect 內部改背景重連立即返回)。
+        await wms.connect();
+        // 綠寶石入金監聽(server /pay):僅在 deposit_enabled 且此帳號是出納(config.toml cashier_staff)時掛載,
+        // 避免每隻 bot 都監聽處理。連線狀態由監聽內 canServe() 把關,WMS 重連成功即可開始處理入金。
+        if (wms.cfg.deposit_enabled !== false && isCashierStaff(bot.username)) {
+            createDepositIntake(wms, bot, logger);
         }
     },
     async link(username, verify) {
@@ -190,6 +221,14 @@ const warehouse = {
     }
 }
 async function order(task) {
+    const wmsStartedAt = Date.now()
+    // 有權限才領單:沒連上 / 無權限時不打 WMS,並嘗試(背景)重連(invalid-token 不會重試)。
+    if (!wms.canServe()) {
+        logger(true, 'WARN', bot_id, `WMS 未啟用(${wms.warehouse_info?.status || 'unknown'}),無法領單`)
+        setWmsDetail(task, 'idle', { currentOrder: null, warehouseStatus: wms.warehouse_info?.status })
+        wms.connect()
+        return
+    }
     setWmsDetail(task, 'fetching', { warehouseStatus: wms.warehouse_info?.status, mode: 'single' })
     const order = await wms.getOrder('get')
     if (!order || !order.order_id || order.order_id === 'Default-001') {
@@ -200,26 +239,38 @@ async function order(task) {
     logger(false, 'INFO', bot_id, `領取訂單 ${order.order_id} optype=${order.optype}`)
     setWmsDetail(task, 'executing', { currentOrder: summarizeOrder(order), transferLive: null })
 
+    wms.setActiveOrder(order)
     const endHandler = async () => await disconnectHandler(order)
     bot.once('end', endHandler)
 
-    const onProgress = (payload) => setWmsDetail(task, 'executing', payload)
-    await wms.executeOrder(bot, order, onProgress)
-    await wms.getOrder('finish', order.order_id)
+    const onProgress = makeOnProgress(task, { mode: 'single', wmsStartedAt })
+    const execRes = await wms.executeOrder(bot, order, onProgress)
+    // transfer 缺貨已自行回報 reportFail(後端標記完成)→ 不再送 finish,避免重覆回報。
+    // 一般完成 → 帶搬運統計送 finish(非 transfer 訂單 statsExtra 為空,行為不變)。
+    if (!execRes || !execRes.reported) await wms.reportFinish(order.order_id, transferStatsExtra(execRes))
+    wms.setActiveOrder(null)
 
     bot.off('end', endHandler)
     setWmsDetail(task, 'idle', { currentOrder: null, transferLive: null })
 }
 async function disconnectHandler(order) {
     logger(true, 'WARN', bot_id, `斷線 取消訂單 ${order.order_id}`)
-    await wms.getOrder('disconnect', order.order_id)
+    // 經 releaseActiveOrder 退回(冪等);避免與關機路徑重複 disconnect。
+    await wms.releaseActiveOrder()
 }
 async function stop(task) {
     wms.standby = false
 }
 async function run(task) {
     let lastglist = Date.now();
+    const wmsStartedAt = Date.now()   // 整段 standby 起算;running 模式接連多單時來源行時間持續累計
     wms.standby = true
+    // 還沒連上 / 無權限就進 standby:啟動(背景)重連,連上後迴圈內 getOrderPendingCount 會自動開始領單。
+    // invalid-token 不會重連,迴圈會空轉(等於不註冊),不會狂打 WMS。
+    if (!wms.canServe()) {
+        logger(true, 'WARN', bot_id, `WMS 未啟用(${wms.warehouse_info?.status || 'unknown'}),standby 等待連線/授權`)
+        wms.connect()
+    }
     process.send({ type: 'setStatus', value: Status.WAREHOUSE_STANDBY })
     setWmsDetail(task, 'standby', {
         mode: 'standby',
@@ -245,12 +296,16 @@ async function run(task) {
                 logger(false, 'INFO', bot_id, `領取訂單 ${order.order_id} optype=${order.optype}`)
                 setWmsDetail(task, 'executing', { currentOrder: summarizeOrder(order), transferLive: null })
 
+                wms.setActiveOrder(order)
                 const endHandler = async () => await disconnectHandler(order)
                 bot.once('end', endHandler)
 
-                const onProgress = (payload) => setWmsDetail(task, 'executing', payload)
-                await wms.executeOrder(bot, order, onProgress)
-                await wms.getOrder('finish', order.order_id)
+                const onProgress = makeOnProgress(task, { mode: 'running', wmsStartedAt })
+                const execRes = await wms.executeOrder(bot, order, onProgress)
+                // transfer 缺貨已自行回報 reportFail(後端標記完成)→ 不再送 finish,避免重覆回報。
+                // 一般完成 → 帶搬運統計送 finish(非 transfer 訂單 statsExtra 為空,行為不變)。
+                if (!execRes || !execRes.reported) await wms.reportFinish(order.order_id, transferStatsExtra(execRes))
+                wms.setActiveOrder(null)
 
                 bot.off('end', endHandler)
                 setWmsDetail(task, 'standby', { currentOrder: null, transferLive: null })
@@ -482,9 +537,7 @@ async function deposit(task) {
         return
     }
     for (const op of operations) {
-        const ok = await wms.executeOperation(bot, op)
-        if (ok) await wms.commit(wms.cfg, op.id)
-        else    await wms.rollback(wms.cfg, op.id)
+        await wms.executeOpCommit(bot, op)
     }
     setWmsDetail(task, 'idle')
 }

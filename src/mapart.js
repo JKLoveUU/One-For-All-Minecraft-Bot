@@ -22,7 +22,6 @@ const mapart = {
             execute: mp_test,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "toggle debug mode",
@@ -30,7 +29,6 @@ const mapart = {
             execute: mp_debug,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 設定",
@@ -38,7 +36,6 @@ const mapart = {
             execute: mp_set,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 材料站生成",
@@ -46,7 +43,6 @@ const mapart = {
             execute: mp_material,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 材料站導出",
@@ -54,7 +50,6 @@ const mapart = {
             execute: mp_file,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 查詢設定",
@@ -62,7 +57,6 @@ const mapart = {
             execute: mp_info,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 建造",
@@ -70,7 +64,6 @@ const mapart = {
             execute: mp_build,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 建造-暫停",
@@ -78,7 +71,6 @@ const mapart = {
             execute: mp_pause,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 建造-繼續",
@@ -86,7 +78,6 @@ const mapart = {
             execute: mp_resume,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 建造-中止",
@@ -94,7 +85,6 @@ const mapart = {
             execute: mp_stop,
             vaild: true,
             longRunning: false,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 開圖",
@@ -102,7 +92,6 @@ const mapart = {
             execute: mp_open,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 命名",
@@ -110,7 +99,6 @@ const mapart = {
             execute: mp_name,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 複印",
@@ -118,7 +106,6 @@ const mapart = {
             execute: mp_copy,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
         {
             name: "地圖畫 分裝",
@@ -126,7 +113,6 @@ const mapart = {
             execute: mp_wrap,
             vaild: true,
             longRunning: true,
-            permissionRequre: 0,
         },
     ],
     async init(ctx) {
