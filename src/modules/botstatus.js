@@ -12,6 +12,7 @@ const Status = {
   // 錯誤關閉
   CLOSED_PROFILE_NOT_FOUND: 'Closed(Profile Not Found)',
   CLOSED_TYPE_NOT_FOUND:    'Closed(Type Not Found)',
+  CLOSED_PROXY_INVALID:     'Closed(Proxy Config Invalid)',
   // Raid
   RAID_RUNNING:          'Running(Raid)',
   RAID_CLOSED_NOT_FOUND: 'Closed(RaidFarm Not Found)',

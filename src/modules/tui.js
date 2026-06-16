@@ -8,57 +8,12 @@ const { setSink, cleanupOldLogs, logger } = require('../logger')
 const discordbot = require('./discordbot')
 const { configPath, profilesPath } = require('./runtimeFiles')
 
-const TOP_H    = 12
-const CMD_H    = 3
-const STATUS_H = 1
-const TABS_H   = 2
+const { T, TOP_H, CMD_H, STATUS_H, TABS_H, TAB_NAMES, TIPS } = require('./tui/theme')
+const { ansiToBlessed } = require('./tui/ansi')
+const { isMissing, val, fmtTask, fmtPos, ageSec, fmtEta, statusColor } = require('./tui/format')
+const { renderAutoQuestDetail, renderClearAreaDetail, renderVillagerDetail, renderWarehouseDetail, renderBuildLikeDetail, fmtWmsSourceLine } = require('./tui/detailRenderers')
+const { buildHelps, helpsTocItem } = require('./tui/helpsContent')
 
-const T = {
-    bg:        '#1e1e2e',
-    surface:   '#313244',
-    overlay:   '#45475a',
-    text:      '#cdd6f4',
-    subtext:   '#bac2de',
-    muted:     '#6c7086',
-    primary:   '#c6a0f6',
-    secondary: '#f5c2e7',
-    success:   '#a6e3a1',
-    warning:   '#f9e2af',
-    error:     '#eba0ac',
-    accent:    '#89b4fa',
-}
-
-const TAB_NAMES = ['Dashboard', 'Console', 'Profiles', 'Helps', 'Settings']
-
-const TIPS = [
-    'press / to enter a command',
-    'use ←/→ or 1-5 to switch tabs',
-    'select a bot in the list to view its info',
-    'scroll wheel works in copy mode (press m)',
-    'G jumps log to bottom, g jumps to top',
-    '/exit or /quit to leave the program',
-    '↑/↓ walks command history in command mode',
-    'press l on a bot to toggle its log filter',
-    'press d on a bot to show its DEBUG output',
-    'mouse selection requires copy mode (m)',
-]
-
-// ANSI → blessed tag converter (for piping pre-formatted logger output)
-const ANSI_MAP = {
-    '30': T.bg,        '31': T.error,     '32': T.success,
-    '33': T.warning,   '34': T.accent,    '35': T.secondary,
-    '36': T.accent,    '37': T.text,      '90': T.muted,
-    '91': T.error,     '92': T.success,   '93': T.warning,
-    '94': T.accent,    '95': T.secondary, '96': T.accent,
-    '97': T.text,
-}
-function ansiToBlessed(str) {
-    return String(str).replace(/\x1b\[(\d+)m/g, (_m, code) => {
-        if (code === '0') return '{/}'
-        const col = ANSI_MAP[code]
-        return col ? `{${col}-fg}` : ''
-    })
-}
 
 function start(botManager, config, callbacks = {}) {
     const { onCommand, onExit, startedAt } = callbacks
@@ -159,6 +114,7 @@ function start(botManager, config, callbacks = {}) {
             try { clearInterval(shutdownPoller) } catch (_) {}
             try { clearInterval(refreshTimer) } catch (_) {}
             try { clearInterval(infoPollTimer) } catch (_) {}
+            try { clearInterval(detailPollTimer) } catch (_) {}
             try { clearInterval(tipTimer) } catch (_) {}
             try { botManager.handle.off('data', onBotData) } catch (_) {}
             try { setSink(null) } catch (_) {}
@@ -279,7 +235,9 @@ function start(botManager, config, callbacks = {}) {
         },
         scrollable: true, alwaysScroll: false, scrollback: 500,
         scrollbar: { ch: ' ', style: { bg: T.primary } },
-        mouse: false, keys: true, vi: true,
+        // keys:false → 不裝內建 vi 捲動;捲動全由下方 logBox.key 手動綁定處理(避免雙重捲動,
+        // 並正確維護 followBottom/unseen)。手動 .key() 在 keys:false 下仍會在 focus 時觸發。
+        mouse: false, keys: false,
     })
     // neo-blessed Log schedules setScrollPerc(100) via nextTick on every 'set content',
     // and resets _userScrolled=false after each call — making the _userScrolled guard
@@ -470,6 +428,7 @@ function start(botManager, config, callbacks = {}) {
     }
     let profilesView = 'profiles' // 'profiles' | 'connection'
     let helpsFocus = 'content' // 'content' | 'toc'
+    // Console 分頁:↑/↓ 操作 Bots、滾輪捲動 Logs(焦點切換見 applyConsoleFocus)。
 
     // Global log overrides (Settings tab).
     let globalDebugAll = false
@@ -554,14 +513,6 @@ function start(botManager, config, callbacks = {}) {
     }
 
     // ── Bot list render ──
-    function statusColor(status) {
-        const s = String(status || '').toLowerCase()
-        if (!status) return T.muted
-        if (s.includes('error') || s.includes('fail') || s.includes('closed')) return T.error
-        if (s.includes('login') || s.includes('connect') || s.includes('joining')) return T.warning
-        if (s.includes('ready') || s.includes('online') || s.includes('running')) return T.success
-        return T.subtext
-    }
     function formatBotItem(bot) {
         // L: log filter (runtime, 'l').  C: chat visible (runtime 't' overrides profile).  D: DEBUG visibility (runtime, 'd').
         const lIcon = isLogEnabled(bot.name)
@@ -597,17 +548,6 @@ function start(botManager, config, callbacks = {}) {
     // ── Info panel (Infos) ──
     const infoCache = {}   // bot.name -> { data, receivedAt }
 
-    function isMissing(v) { return v == null || v === '-' || v === '' || v === -1 || v === '-1' }
-    function val(v)       { return isMissing(v) ? '-' : v }
-    function fmtTask(t) {
-        if (isMissing(t)) return '-'
-        if (typeof t !== 'object') return '-'                   // reject booleans, numbers etc
-        if (typeof t.displayName === 'string' && t.displayName) return t.displayName
-        if (typeof t.name        === 'string' && t.name)        return t.name
-        if (typeof t.type        === 'string' && t.type)        return t.type
-        if (Array.isArray(t.content) && t.content.length)       return t.content.join(' ')
-        return '-'
-    }
 
     // 離線 bot 的 task.json 快取。TTL=2s,但 mtime 變化立即失效 — 方便 .task remove 立即看到結果。
     const offlineTaskCache = {}   // botName -> { tasks, readAt, ok, err, mtimeMs }
@@ -634,17 +574,6 @@ function start(botManager, config, callbacks = {}) {
         }
         offlineTaskCache[botName] = entry
         return entry
-    }
-    function fmtPos(p) {
-        if (!p || typeof p !== 'object') return '-'
-        const x = Number(p.x), y = Number(p.y), z = Number(p.z)
-        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-            return `${x | 0}, ${y | 0}, ${z | 0}`
-        }
-        return '-'
-    }
-    function ageSec(t) {
-        return t ? Math.max(0, Math.round((Date.now() - t) / 1000)) : null
     }
 
     function renderInfos() {
@@ -745,415 +674,6 @@ function start(botManager, config, callbacks = {}) {
         infoBox.setContent(rows.join('\n'))
     }
 
-    function detailStateColor(state) {
-        switch (state) {
-            case 'running':    return T.success
-            case 'waiting':    return T.warning
-            case 'refreshing': return T.accent
-            case 'paused':     return T.warning
-            case 'protect':    return T.secondary
-            case 'idle':       return T.muted
-            case 'stopping':
-            case 'stopped':    return T.muted
-            case 'error':      return T.error
-            default:           return T.subtext
-        }
-    }
-    function renderAutoQuestDetail(detail) {
-        const p = detail.payload || {}
-        const sCol = detailStateColor(detail.state)
-        const progressTxt = (p.progress && p.progress.total)
-            ? `${p.progress.done}/${p.progress.total}`
-            : '-'
-        const nextTxt = (p.next === 0 || p.next === '0') ? `{${T.success}-fg}已就緒{/}`
-            : isMissing(p.next) ? '-' : p.next
-        const afkTxt = isMissing(p.afkWarp) ? '' : `   {${T.subtext}-fg}AFK{/} ${p.afkWarp}`
-        // protect 時把顯示文字換成「等待拉霸 / 等待冷卻」,讓使用者一眼看出在等什麼
-        const stateTxt = detail.state === 'protect'
-            ? (p.protect && p.protect.reason === 'cooldown' ? '等待冷卻' : '等待拉霸')
-            : detail.state
-        const elapsedTxt = !isMissing(p.currentTaskDurationMs)
-            ? `   {${T.subtext}-fg}已執行{/} {${T.warning}-fg}${fmtEta(p.currentTaskDurationMs)}{/}`
-            : ''
-        return [
-            `  {${T.primary}-fg}{bold}AutoQuest{/bold}{/}  {${sCol}-fg}${stateTxt}{/}  {${T.muted}-fg}(${detail.phase}){/}`,
-            `  {${T.subtext}-fg}任務{/} ${val(p.questName)}`,
-            `  {${T.subtext}-fg}目標{/} ${val(p.target)}`,
-            `  {${T.subtext}-fg}進度{/} ${progressTxt}   {${T.subtext}-fg}獎勵{/} ${val(p.reward)}${elapsedTxt}`,
-            `  {${T.subtext}-fg}期限{/} ${val(p.remain)}   {${T.subtext}-fg}下個{/} ${nextTxt}`,
-            `  {${T.subtext}-fg}剩餘跳過{/} ${val(p.skipAvailableUses)}${afkTxt}`,
-        ].join('\n')
-    }
-    function fmtEta(ms) {
-        if (!Number.isFinite(ms) || ms <= 0) return '-'
-        const s = Math.round(ms / 1000)
-        if (s < 60) return `${s}s`
-        const m = Math.floor(s / 60), ss = s % 60
-        if (m < 60) return `${m}m${ss}s`
-        const h = Math.floor(m / 60), mm = m % 60
-        return `${h}h${mm}m`
-    }
-    const CA_STATUS_LABEL = {
-        tnt:      { text: 'TNT 清理',   col: 'warning' },
-        dig:      { text: '挖掘中',     col: 'warning' },
-        liquid:   { text: '封堵液體',   col: 'accent'  },
-        obsidian: { text: '黑曜石',     col: 'secondary' },
-        restock:  { text: '倉庫補貨',   col: 'accent'  },
-        collect:  { text: '回收掉落物', col: 'success' },
-        navigate: { text: '導航中',     col: 'accent'  },
-        wait_tnt: { text: '等待爆炸',   col: 'muted'   },
-        init:     { text: '初始化',     col: 'muted'   },
-        paused:   { text: '已暫停',     col: 'warning' },
-        stopped:  { text: '已停止',     col: 'muted'   },
-        finished: { text: '已完成',     col: 'success' },
-    }
-    const VT_JOB_LABEL = {
-        iron:         '鐵村民交易',
-        melonpumpkin: '雙瓜交易',
-        train:        '村民訓練',
-        cure:         '治療改名',
-        put:          '放置村民',
-    }
-    const VT_STATUS_LABEL = {
-        navigate:        { text: '導航中',     col: 'accent'    },
-        trading:         { text: '交易中',     col: 'success'   },
-        restocking:      { text: '補貨中',     col: 'warning'   },
-        no_iron:         { text: '鐵不足',     col: 'error'     },
-        sort:            { text: '分類村民',   col: 'accent'    },
-        summon:          { text: '召喚村民',   col: 'secondary' },
-        capture_good:    { text: '收取好村民', col: 'success'   },
-        reject_bad:      { text: '拒絕爛村民', col: 'error'     },
-        zombify_summon:  { text: '感染-放村民', col: 'secondary' },
-        zombify_capture: { text: '感染-抓殭屍', col: 'warning'   },
-        cure_weak:       { text: '治療-虛弱',   col: 'accent'    },
-        cure_apple:      { text: '治療-金蘋果', col: 'warning'   },
-        cure_rename:     { text: '治療-改名',   col: 'secondary' },
-        cure_capture:    { text: '治療-抓村民', col: 'success'   },
-        cure_summon:     { text: '治療-放殭屍', col: 'secondary' },
-        placing:         { text: '放置中',     col: 'success'   },
-        removing:        { text: '移除中',     col: 'warning'   },
-        paused:          { text: '已暫停',     col: 'warning'   },
-        stopped:         { text: '已停止',     col: 'muted'     },
-    }
-    function renderVillagerDetail(detail) {
-        const p = detail.payload || {}
-        const jobLbl = VT_JOB_LABEL[detail.job] || detail.job || '-'
-        const stLbl = VT_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[stLbl.col] || T.subtext
-        const place = (!isMissing(p.warp) || !isMissing(p.server))
-            ? `s${val(p.server)} ${val(p.warp)}`
-            : '-'
-        const extra = !isMissing(p.vtype)
-            ? `   {${T.muted}-fg}vtype ${p.vtype}{/}`
-            : ''
-        const lines = [
-            `  {${T.primary}-fg}{bold}Villager{/bold}{/}  {${T.subtext}-fg}${jobLbl}{/}`,
-            `  {${T.subtext}-fg}場地{/} ${place}${extra}`,
-            `  {${T.subtext}-fg}狀態{/} {${stColRaw}-fg}${stLbl.text}{/}`,
-        ]
-        if (detail.job === 'melonpumpkin' || detail.job === 'iron') {
-            if (!isMissing(p.totalEarn)) {
-                const perMin  = isMissing(p.earnPerMin)  ? '-' : p.earnPerMin
-                const perHour = isMissing(p.earnPerHour) ? '-' : p.earnPerHour
-                lines.push(`  {${T.subtext}-fg}收益{/} {${T.success}-fg}${p.totalEarn}{/}  {${T.muted}-fg}~${perMin}/min  ~${perHour}/hr{/}`)
-            }
-            if (!isMissing(p.tradePairs))
-                lines.push(`  {${T.subtext}-fg}交易{/} {${T.accent}-fg}${p.tradePairs}{/}`)
-            if (!isMissing(p.chunkName))
-                lines.push(`  {${T.subtext}-fg}區塊{/} ${p.chunkName}  {${T.muted}-fg}村民 ${isMissing(p.villagerCount) ? '-' : p.villagerCount}{/}`)
-        }
-        return lines.join('\n')
-    }
-    const BUILD_STATUS_LABEL = {
-        init:     { text: '初始化',   col: 'muted'   },
-        placing:  { text: '放置中',   col: 'success' },
-        restock:  { text: '材料補充', col: 'accent'  },
-        navigate: { text: '導航中',   col: 'accent'  },
-        paused:   { text: '已暫停',   col: 'warning' },
-        finished: { text: '已完成',   col: 'success' },
-        stopped:  { text: '已停止',   col: 'muted'   },
-    }
-    function renderBuildLikeDetail(detail) {
-        const p = detail.payload || {}
-        const blocks = p.blocks || {}
-        const palette = p.palette || {}
-        const lbl = BUILD_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[lbl.col] || T.subtext
-        const title = detail.type === 'mapart' ? 'Mapart' : 'Build'
-        const modelTxt = detail.type === 'mapart'
-            ? `{${T.muted}-fg}mapart{/}`
-            : `{${T.muted}-fg}${val(p.model)}{/}`
-        const sch = (p.schematic || '-').split(/[\\\/]/).pop()
-        const place = p.placement
-            ? `${p.placement.x|0},${p.placement.y|0},${p.placement.z|0}`
-            : '-'
-        // building 的 palette 是「該層的材料」,mapart 是「整體材料」
-        const paletteScopeTxt = detail.type === 'mapart' ? '材料' : '層內材料'
-        const paletteTxt = (palette.total != null)
-            ? `${val(palette.current + 1)}/${val(palette.total)}`
-            : '-'
-        const speedTxt = !isMissing(p.blocksPerHour) ? `${p.blocksPerHour} blk/h` : '-'
-
-        const rows = [
-            `  {${T.primary}-fg}{bold}${title}{/bold}{/} ${modelTxt}  {${stColRaw}-fg}${lbl.text}{/}`,
-            `  {${T.subtext}-fg}投影{/} ${sch}`,
-            `  {${T.subtext}-fg}原點{/} ${place}   {${T.subtext}-fg}s{/}${val(p.server)}`,
-            `  {${T.subtext}-fg}方塊{/} ${val(blocks.placed)}/${val(blocks.total)} (${val(blocks.percent)}%)`,
-        ]
-        // building 有層,mapart 沒有
-        if (detail.type !== 'mapart' && p.layer && p.layer.total != null) {
-            rows.push(`  {${T.subtext}-fg}層{/} ${val(p.layer.current + 1)}/${val(p.layer.total)}   {${T.subtext}-fg}${paletteScopeTxt}{/} ${paletteTxt}`)
-        } else {
-            rows.push(`  {${T.subtext}-fg}${paletteScopeTxt}{/} ${paletteTxt}`)
-        }
-        if (palette.name) {
-            rows.push(`  {${T.subtext}-fg}材料名{/} {${T.muted}-fg}${palette.name}{/}`)
-        }
-        rows.push(`  {${T.subtext}-fg}ETA{/} ${fmtEta(p.etaMs)}   {${T.muted}-fg}${speedTxt}{/}`)
-        return rows.join('\n')
-    }
-    const WMS_STATUS_LABEL = {
-        standby:            { text: '待機',         col: 'success' },
-        idle:               { text: '空閒',         col: 'muted'   },
-        fetching:           { text: '查詢訂單',     col: 'accent'  },
-        executing:          { text: '執行訂單',     col: 'warning' },
-        updating_barrels:   { text: '更新桶子',     col: 'accent'  },
-        querying:           { text: '查詢庫存',     col: 'accent'  },
-        withdrawing:        { text: '出貨',         col: 'warning' },
-        depositing:         { text: '入庫',         col: 'warning' },
-        depositing_picking: { text: '入庫(揀貨區)', col: 'warning' },
-        sorting:            { text: '整理拒收',     col: 'accent'  },
-        stopped:            { text: '已停止',       col: 'muted'   },
-    }
-    const WMS_OPTYPE_LABEL = {
-        deposit:     '入庫',
-        withdraw:    '出貨',
-        unpacking:   '拆箱',
-        packing:     '裝箱',
-        fix:         '修復',
-        buy_at_shop: '商店購買',
-        transfer:    '搬運',
-    }
-    function renderWarehouseDetail(detail) {
-        const p = detail.payload || {}
-        const lbl = WMS_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[lbl.col] || T.subtext
-        const wsCol = p.warehouseStatus === 'running' ? T.success
-                    : isMissing(p.warehouseStatus)    ? T.muted
-                    :                                    T.error
-        const headLine = `  {${T.primary}-fg}{bold}WMS{/bold}{/} {${T.muted}-fg}${val(p.mode) || '-'}{/}  {${stColRaw}-fg}${lbl.text}{/}`
-        const wsLineBase = `  {${T.subtext}-fg}倉庫{/} {${wsCol}-fg}${val(p.warehouseStatus)}{/}`
-
-        const order = p.currentOrder
-        if (order) {
-            const optTxt = WMS_OPTYPE_LABEL[order.optype] || order.optype || '-'
-
-            // Transfer 訂單 — 顯示兩個 warp / 兩個分流 / 剩餘次數 / 累積金額。
-            if (order.optype === 'transfer') {
-                const live = p.transferLive || {}
-                const tInit = order.transfer || {}
-                const buyWarp  = live.buyWarp  || tInit.buyWarp  || '-'
-                const sellWarp = live.sellWarp || tInit.sellWarp || '-'
-                const buyServerTxt  = live.buyServer  != null ? `s${live.buyServer}`  : `{${T.muted}-fg}s?{/}`
-                const sellServerTxt = live.sellServer != null ? `s${live.sellServer}` : `{${T.muted}-fg}s?{/}`
-                const count = (live.count != null) ? live.count : (tInit.count != null ? tInit.count : null)
-                const remaining = live.remaining
-                const remainTxt = (count === -1)
-                    ? `{${T.success}-fg}∞{/}`
-                    : (remaining != null ? `${remaining}` : (count != null ? `${count}` : '-'))
-                const sideTxt = live.side === 'buy'  ? `{${T.warning}-fg}搬運-購買中{/}`
-                              : live.side === 'sell' ? `{${T.success}-fg}搬運-出售中{/}`
-                              :                        `{${T.muted}-fg}搬運-{/}`
-                const reward = live.totalReward != null ? live.totalReward : 0
-                const cost   = live.totalCost   != null ? live.totalCost   : 0
-                const income = live.totalIncome != null ? live.totalIncome : 0
-                const profit = income - cost
-                const profitCol = profit >= 0 ? T.success : T.error
-                const buyTrips  = live.buyTrips  ?? 0
-                const sellTrips = live.sellTrips ?? 0
-                const buyQty    = live.buyQty    ?? 0
-                const sellQty   = live.sellQty   ?? 0
-                const totalTrips = buyTrips + sellTrips
-                const buySellTxt = `  {${T.warning}-fg}買{/} {${T.text}-fg}${buyTrips}趟/${buyQty}個{/}  {${T.success}-fg}賣{/} {${T.text}-fg}${sellTrips}趟/${sellQty}個{/}`
-                return [
-                    headLine,
-                    `${wsLineBase}   ${sideTxt}`,
-                    `  {${T.subtext}-fg}訂單{/} ${val(order.id)}`,
-                    `  {${T.subtext}-fg}買{/} ${buyServerTxt} {${T.text}-fg}${buyWarp}{/}`,
-                    `  {${T.subtext}-fg}賣{/} ${sellServerTxt} {${T.text}-fg}${sellWarp}{/}`,
-                    `  {${T.subtext}-fg}剩餘{/} ${remainTxt}   {${T.muted}-fg}共${totalTrips}趟{/}`,
-                    buySellTxt,
-                    `  {${T.subtext}-fg}拉霸{/} {${T.success}-fg}${reward}{/}   {${T.subtext}-fg}搬運收益{/} {${profitCol}-fg}${profit}{/}`,
-                    `  {${T.subtext}-fg}支出{/} ${cost}   {${T.subtext}-fg}收入{/} ${income}`,
-                ].join('\n')
-            }
-
-            const itemTxt = order.firstItem
-                ? `${order.firstItem.item} x${order.firstItem.quantity}` + (order.itemCount > 1 ? ` (+${order.itemCount - 1})` : '')
-                : '-'
-            const orderLines = [
-                headLine,
-                wsLineBase,
-                `  {${T.subtext}-fg}訂單{/} ${val(order.id)}`,
-                `  {${T.subtext}-fg}類型{/} {${T.muted}-fg}${optTxt}{/}   {${T.subtext}-fg}揀貨區{/} ${val(order.pickingArea)}`,
-                `  {${T.subtext}-fg}物品{/} ${itemTxt}`,
-                `  {${T.subtext}-fg}總量{/} ${val(order.totalQty)}`,
-            ]
-            if (p.acceptRemaining != null) {
-                const remCol = p.acceptRemaining === 0 ? T.success : T.warning
-                orderLines.push(`  {${T.subtext}-fg}待處理箱{/} {${remCol}-fg}${p.acceptRemaining}{/} {${T.muted}-fg}/ ${p.acceptTotal}{/}`)
-            }
-            return orderLines.join('\n')
-        }
-
-        // Single-op modes (update / query / withdraw / deposit / sort / dp)
-        const lines = [headLine, wsLineBase]
-        if (p.barrelRange) {
-            lines.push(`  {${T.subtext}-fg}桶子{/} #${val(p.barrelRange.start)} ~ #${val(p.barrelRange.end)}`)
-        } else if (p.currentItem) {
-            lines.push(`  {${T.subtext}-fg}物品{/} ${val(p.currentItem.name)} x${val(p.currentItem.quantity)}`)
-        } else if (!isMissing(p.queryItem)) {
-            lines.push(`  {${T.subtext}-fg}查詢{/} ${p.queryItem}` + (isMissing(p.queryResult) ? '' : `   {${T.success}-fg}${p.queryResult}{/}`))
-        } else if (!isMissing(p.pickingAreaId)) {
-            lines.push(`  {${T.subtext}-fg}揀貨區{/} ${p.pickingAreaId}`)
-        }
-        if (p.acceptRemaining != null) {
-            const remCol = p.acceptRemaining === 0 ? T.success : T.warning
-            lines.push(`  {${T.subtext}-fg}待處理箱{/} {${remCol}-fg}${p.acceptRemaining}{/} {${T.muted}-fg}/ ${p.acceptTotal}{/}`)
-        }
-        return lines.join('\n')
-    }
-    function renderClearAreaDetail(detail) {
-        if (detail.mode === 'tnt2') return renderClearAreaTnt2Detail(detail)
-        if (detail.mode === 'dig') return renderClearAreaDigDetail(detail)
-        const p = detail.payload || {}
-        const layer = p.layer || {}
-        const overall = p.overall || {}
-        const lbl = CA_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[lbl.col] || T.subtext
-        const layerPct = (layer.total ? Math.round(layer.done / layer.total * 1000) / 10 : 0)
-        const yRange = (!isMissing(p.layerYTop) && !isMissing(p.layerYBottom))
-            ? `${p.layerYTop}~${p.layerYBottom}` : '-'
-        const areaY = (p.area && !isMissing(p.area.p1?.y) && !isMissing(p.area.p2?.y))
-            ? `  {${T.muted}-fg}(全 ${p.area.p1.y}~${p.area.p2.y}){/}` : ''
-        // collect 模式：●●●○ 視覺
-        const COLLECT_LEVELS = { low: 1, medium: 2, high: 3, max: 4 }
-        const COLLECT_COLS   = { low: T.muted, medium: T.warning, high: T.success, max: T.primary }
-        const cEnable = !!p.collectEnable
-        const cFreq   = p.collectFreq || 'off'
-        const cN      = cEnable ? (COLLECT_LEVELS[cFreq] || 0) : 0
-        const cCol    = cEnable ? (COLLECT_COLS[cFreq] || T.muted) : T.muted
-        const cDots   = `{${cCol}-fg}${'●'.repeat(cN)}{/}{${T.muted}-fg}${'○'.repeat(4 - cN)}{/}`
-        const cLabel  = cEnable ? cFreq : '關閉'
-        // 優先顯示「TNT 間隔」(實測);沒樣本時退回 avg child
-        const placeMs = (p.avgPlaceMs > 0) ? p.avgPlaceMs : p.avgChildMs
-        const placeLabel = (p.avgPlaceMs > 0)
-            ? `TNT 間隔 ${fmtEta(placeMs)} (n=${val(p.tntSamples)})`
-            : `avg ${fmtEta(placeMs)}/cell`
-        return [
-            `  {${T.primary}-fg}{bold}ClearArea{/bold}{/} {${T.muted}-fg}TNT{/}  {${stColRaw}-fg}${lbl.text}{/}`,
-            `  {${T.subtext}-fg}層 Y{/} ${yRange}${areaY}`,
-            `  {${T.subtext}-fg}bit{/} ${val(p.currentBit)}   {${T.subtext}-fg}本 bit{/} ${val(p.currentBitDone)}/${val(p.currentBitTotal)} cells`,
-            `  {${T.subtext}-fg}該層{/} ${val(layer.done)}/${val(layer.total)} (${layerPct}%)  {${T.muted}-fg}~${fmtEta(layer.etaMs)}{/}`,
-            `  {${T.subtext}-fg}整體{/} ${val(overall.layersDone)}/${val(overall.totalLayers)} 層 ${val(overall.percent)}%  {${T.muted}-fg}~${fmtEta(overall.etaMs)}{/}`,
-            `  {${T.subtext}-fg}剩餘 TNT{/} ${val(p.tntsRemaining)} 發  {${T.muted}-fg}${placeLabel}{/}`,
-            `  {${T.subtext}-fg}採集{/} ${cDots}  {${T.muted}-fg}${cLabel}{/}`,
-            `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
-        ].join('\n')
-    }
-    function renderClearAreaTnt2Detail(detail) {
-        const p = detail.payload || {}
-        const overall = p.overall || {}
-        const sc = p.statusCount || {}
-        const grid = p.grid || {}
-        const lbl = CA_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[lbl.col] || T.subtext
-        const yRange = (!isMissing(p.yMax) && !isMissing(p.yMin))
-            ? `${p.yMax}~${p.yMin}` : '-'
-        const yBounds = (!isMissing(p.yTop) && !isMissing(p.yBot))
-            ? ` {${T.muted}-fg}(頂 ${p.yTop} 底 ${p.yBot}){/}` : ''
-        const childrenLine = `${val(p.finishedChildren)}/${val(p.totalChildren)} 完成` +
-            (!isMissing(p.inProgressChildren) ? `   {${T.subtext}-fg}進行{/} ${p.inProgressChildren}` : '')
-        const breakdown = [
-            sc.scan     ? `{${T.muted}-fg}掃{/} ${sc.scan}` : null,
-            sc.tnt      ? `{${T.warning}-fg}TNT{/} ${sc.tnt}` : null,
-            sc.liquid   ? `{${T.accent}-fg}液{/} ${sc.liquid}` : null,
-            sc.obsidian ? `{${T.secondary}-fg}黑{/} ${sc.obsidian}` : null,
-            sc.cooling  ? `{${T.muted}-fg}冷{/} ${sc.cooling}` : null,
-        ].filter(Boolean).join('  ')
-        const gridStr = (!isMissing(grid.x_size) && !isMissing(grid.z_size))
-            ? `${grid.x_size}x${grid.z_size} (${grid.length} cells)` : '-'
-        // 優先顯示「TNT 間隔」(實測);沒樣本時退回 avg child
-        const placeMs = (p.avgPlaceMs > 0) ? p.avgPlaceMs : p.avgChildMs
-        const placeLabel = (p.avgPlaceMs > 0)
-            ? `TNT 間隔 ${fmtEta(placeMs)} (n=${val(p.tntSamples)})`
-            : `avg ${fmtEta(placeMs)}/層`
-        return [
-            `  {${T.primary}-fg}{bold}ClearArea{/bold}{/} {${T.muted}-fg}TNT2 獨立Y{/}  {${stColRaw}-fg}${lbl.text}{/}`,
-            `  {${T.subtext}-fg}進度{/} ${val(overall.percent)}%  {${T.muted}-fg}~${fmtEta(overall.etaMs)}{/}`,
-            `  {${T.subtext}-fg}子區{/} ${childrenLine}   {${T.subtext}-fg}剩餘 TNT{/} ${val(p.tntsRemaining)} 發`,
-            `  {${T.subtext}-fg}Y 範圍{/} ${yRange}${yBounds}`,
-            breakdown ? `  {${T.subtext}-fg}狀態{/} ${breakdown}` : null,
-            `  {${T.subtext}-fg}網格{/} ${gridStr}  {${T.muted}-fg}${placeLabel}{/}`,
-            `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
-        ].filter(Boolean).join('\n')
-    }
-    function renderClearAreaDigDetail(detail) {
-        const p = detail.payload || {}
-        const overall = p.overall || {}
-        const children = p.children || {}
-        const cell = p.cell || {}
-        const grid = p.grid || {}
-        const cci = p.currentChildIndex || {}
-        const ccp = p.currentChildPos
-        const lbl = CA_STATUS_LABEL[detail.status] || { text: detail.status, col: 'subtext' }
-        const stColRaw = T[lbl.col] || T.subtext
-        const childrenLine = `${val(children.done)}/${val(children.total)} 完成` +
-            (!isMissing(children.failed) && children.failed > 0 ? `   {${T.error}-fg}失敗{/} ${children.failed}` : '') +
-            (!isMissing(children.remaining) ? `   {${T.subtext}-fg}剩餘{/} ${children.remaining}` : '')
-        const childIdx = (!isMissing(cci.x) && !isMissing(cci.z)) ? `(${cci.x},${cci.z})` : '-'
-        const childPos = ccp ? ` {${T.muted}-fg}@ ${ccp.x},${ccp.y},${ccp.z}{/}` : ''
-        const breakdown = [
-            cell.scan   ? `{${T.muted}-fg}掃{/} ${cell.scan}` : null,
-            cell.dig    ? `{${T.warning}-fg}挖{/} ${cell.dig}` : null,
-            cell.liquid ? `{${T.accent}-fg}液{/} ${cell.liquid}` : null,
-            cell.done   ? `{${T.success}-fg}完{/} ${cell.done}` : null,
-        ].filter(Boolean).join('  ')
-        const gridStr = (!isMissing(grid.x_size) && !isMissing(grid.z_size))
-            ? `${grid.x_size}x${grid.z_size} (${grid.length} 子區)` : '-'
-        const digMs = p.avgDigMs > 0 ? p.avgDigMs : 0
-        const digLabel = digMs > 0
-            ? `cell 間隔 ${fmtEta(digMs)} (n=${val(p.digSamples)})`
-            : `avg ${fmtEta(p.avgChildMs)}/子區`
-        const sb = p.supportblock
-        const bsb = p.borderSupportBlock
-        const sbLine = (!isMissing(sb) || !isMissing(bsb))
-            ? `  {${T.subtext}-fg}封堵{/} {${T.muted}-fg}內{/} ${val(sb)}` +
-              (bsb && bsb !== sb ? `  {${T.muted}-fg}外{/} ${val(bsb)}` : '')
-            : null
-        return [
-            `  {${T.primary}-fg}{bold}ClearArea{/bold}{/} {${T.muted}-fg}挖掘{/}  {${stColRaw}-fg}${lbl.text}{/}`,
-            `  {${T.subtext}-fg}進度{/} ${val(overall.percent)}%  {${T.muted}-fg}~${fmtEta(overall.etaMs)}{/}`,
-            `  {${T.subtext}-fg}子區{/} ${childrenLine}`,
-            `  {${T.subtext}-fg}當前{/} ${childIdx}${childPos}`,
-            breakdown ? `  {${T.subtext}-fg}cell{/} ${breakdown}` : null,
-            `  {${T.subtext}-fg}已挖{/} ${val(p.cellsDug)} 格  {${T.muted}-fg}${digLabel}{/}`,
-            `  {${T.subtext}-fg}網格{/} ${gridStr}`,
-            sbLine,
-            `  {${T.subtext}-fg}場地{/} {${T.subtext}-fg}s{/}${val(p.area && p.area.server)} ${val(p.area && p.area.warp)}`,
-        ].filter(Boolean).join('\n')
-    }
-    // WMS 分工單元的來源行:取代 clear/build detail 的第一行(標題行)。
-    // 形如:  [12m0s] WMS single   [3m0s] ClearArea
-    const WMS_SOURCE_OP_LABEL = { cleararea: 'ClearArea', mapart: 'Mapart', litematic: 'Build' }
-    function fmtWmsSourceLine(detail) {
-        const src = detail.source || {}
-        const upWms = src.wmsStartedAt ? fmtEta(Date.now() - src.wmsStartedAt) : '-'
-        const upOp  = src.opStartedAt  ? fmtEta(Date.now() - src.opStartedAt)  : '-'
-        const modeLbl = src.mode || '-'
-        const opLbl = WMS_SOURCE_OP_LABEL[detail.type] || detail.type || '-'
-        return `  {${T.accent}-fg}[${upWms}]{/} {${T.primary}-fg}{bold}WMS ${modeLbl}{/bold}{/}   {${T.accent}-fg}[${upOp}]{/} {${T.subtext}-fg}${opLbl}{/}`
-    }
     function renderDetail() {
         const sel = botManager.bots[botList.selected]
         if (!sel) {
@@ -1255,17 +775,40 @@ function start(botManager, config, callbacks = {}) {
 
     // Periodic pull: ask each live child for fresh data. 同時觸發 redraw 讓離線 bot 的
     // task.json 變動 (來自 .task remove 或外部編輯) 也能在 ~3s 內反映出來。
+    const TRAFFIC_SPARK_LEN = 40           // 約 40 × 3s ≈ 2 分鐘的即時頻寬走勢
+    const trafficSpark = []                // 每筆 = 當下所有 bot 的 Σ即時速率 (rx+tx) bytes/s
     const infoPollTimer = setInterval(() => {
         for (const b of botManager.bots) {
             if (b.childProcess) {
                 try { b.childProcess.send({ type: 'dataRequire' }) } catch (_) {}
             }
         }
+        // 取樣聚合即時頻寬(離線 bot 速率為 0),推進 sparkline ring buffer
+        let agg = 0
+        for (const b of botManager.bots) {
+            if (!b.childProcess) continue
+            const r = b.trafficRate || { rx: 0, tx: 0 }
+            agg += (r.rx || 0) + (r.tx || 0)
+        }
+        trafficSpark.push(agg)
+        if (trafficSpark.length > TRAFFIC_SPARK_LEN) trafficSpark.shift()
+        if (activeTab === 0) { tabContent.setContent(dashboardContent()); screen.render() }
         if (activeTab === 1) {
             const sel = botManager.bots[botList.selected]
             if (sel && !sel.childProcess) { renderInfos(); renderDetail(); screen.render() }
         }
     }, 3000)
+
+    // 高頻 detail 刷新:只對「Console 分頁 + 當前選取 + 在線」的單一 bot 送 dataRequire,
+    // 讓右上角 detail 接近即時。離線 bot 的 task.json 已由上方 3s poll 處理,這裡略過。
+    // 收到回傳後由 onBotData 觸發 renderInfos/renderDetail,故此處不需自行 render。
+    const detailPollTimer = setInterval(() => {
+        if (activeTab !== 1) return
+        const sel = botManager.bots[botList.selected]
+        if (sel && sel.childProcess) {
+            try { sel.childProcess.send({ type: 'dataRequire' }) } catch (_) {}
+        }
+    }, 500)
 
     // ── Tab content generators ──
     function fmtBytes(n) {
@@ -1284,6 +827,12 @@ function start(botManager, config, callbacks = {}) {
         if (h > 0) return `${h}h${m}m`
         if (m > 0) return `${m}m${ss}s`
         return `${ss}s`
+    }
+    const SPARK_CHARS = '▁▂▃▄▅▆▇█'
+    function sparkline(arr) {
+        if (!arr || arr.length === 0) return ''
+        const max = Math.max(...arr, 1)
+        return arr.map(v => SPARK_CHARS[Math.min(SPARK_CHARS.length - 1, Math.floor((v / max) * (SPARK_CHARS.length - 1)))]).join('')
     }
     function dashboardContent() {
         const bots = botManager.bots || []
@@ -1309,6 +858,7 @@ function start(botManager, config, callbacks = {}) {
             header.push(`  {${T.muted}-fg}  no bots registered{/}`)
             return header.join('\n')
         }
+        let online = 0, sumRss = 0, sumUsed = 0, sumTot = 0, sumExt = 0
         for (const b of bots) {
             const pid = (b.childProcess && b.childProcess.pid) || '-'
             // Gate memory snapshot on a live child — old cached numbers shouldn't show after exit.
@@ -1319,8 +869,16 @@ function start(botManager, config, callbacks = {}) {
             const used = mem ? fmtBytes(mem.heapUsed)   : '-'
             const tot  = mem ? fmtBytes(mem.heapTotal)  : '-'
             const ext  = mem ? fmtBytes(mem.external)   : '-'
+            if (b.childProcess) online++
+            if (mem) { sumRss += mem.rss; sumUsed += mem.heapUsed; sumTot += mem.heapTotal; sumExt += mem.external }
             const sCol = statusColor(b.status)
             const status = b.status || '-'
+            // 重啟倒數:離線且已排定重連的 bot 顯示 restart in Ns
+            let statusSeg = `{${sCol}-fg}${status}{/}`
+            if (!b.childProcess && b.reloadScheduledAt && b.reloadCD) {
+                const remain = b.reloadScheduledAt + b.reloadCD - Date.now()
+                if (remain > 0) statusSeg += ` {${T.muted}-fg}(restart in ${Math.ceil(remain / 1000)}s){/}`
+            }
             const pidStr = b.childProcess
                 ? `{${T.success}-fg}${String(pid).padEnd(8)}{/}`
                 : `{${T.muted}-fg}${'-'.padEnd(8)}{/}`
@@ -1331,264 +889,65 @@ function start(botManager, config, callbacks = {}) {
                 `{${T.accent}-fg}${used.padEnd(11)}{/} ` +
                 `{${T.muted}-fg}${tot.padEnd(11)}{/} ` +
                 `{${T.muted}-fg}${ext.padEnd(9)}{/} ` +
-                `{${sCol}-fg}${status}{/}`
+                statusSeg
             )
+        }
+        // 記憶體合計列
+        header.push(
+            `  {${T.subtext}-fg}${'Σ'.padEnd(14)}{/} ` +
+            `{${T.muted}-fg}${(online + '/' + bots.length).padEnd(8)}{/} ` +
+            `{${T.accent}-fg}${fmtBytes(sumRss).padEnd(10)}{/} ` +
+            `{${T.accent}-fg}${fmtBytes(sumUsed).padEnd(11)}{/} ` +
+            `{${T.muted}-fg}${fmtBytes(sumTot).padEnd(11)}{/} ` +
+            `{${T.muted}-fg}${fmtBytes(sumExt).padEnd(9)}{/} ` +
+            `{${T.subtext}-fg}online{/}`
+        )
+
+        // ── 網路流量區(獨立於記憶體表下方):即時速率 vs 歷史累計 ──
+        const fmtRate = n => fmtBytes(Math.round(n)) + '/s'
+        header.push('')
+        header.push(`  {${T.primary}-fg}{bold}Network Traffic{/bold}{/}  {${T.muted}-fg}(Live=即時速率 · Total=歷史累計;↓下行 ↑上行){/}`)
+        header.push(`  {${T.surface}-bg}{${T.subtext}-fg} ${'Bot'.padEnd(14)} ${'Live ↓'.padEnd(12)} ${'Live ↑'.padEnd(12)} ${'Total ↓'.padEnd(11)} ${'Total ↑'.padEnd(11)} ${'Total'.padEnd(11)} {/}`)
+        let liveRxSum = 0, liveTxSum = 0, totRxSum = 0, totTxSum = 0
+        for (const b of bots) {
+            const tc = b.trafficCommitted || { rx: 0, tx: 0 }
+            const ts = b.trafficSession   || { rx: 0, tx: 0 }
+            const rate = b.trafficRate    || { rx: 0, tx: 0 }
+            const rxT = (tc.rx || 0) + (ts.rx || 0), txT = (tc.tx || 0) + (ts.tx || 0)
+            totRxSum += rxT; totTxSum += txT
+            // 即時速率只有在線時有意義;離線顯示 '-'。歷史累計永遠顯示。
+            const liveRx = b.childProcess ? fmtRate(rate.rx) : '-'
+            const liveTx = b.childProcess ? fmtRate(rate.tx) : '-'
+            if (b.childProcess) { liveRxSum += (rate.rx || 0); liveTxSum += (rate.tx || 0) }
+            header.push(
+                `  {${T.text}-fg}${b.name.padEnd(14)}{/} ` +
+                `{${T.success}-fg}${liveRx.padEnd(12)}{/} ` +
+                `{${T.warning}-fg}${liveTx.padEnd(12)}{/} ` +
+                `{${T.accent}-fg}${fmtBytes(rxT).padEnd(11)}{/} ` +
+                `{${T.accent}-fg}${fmtBytes(txT).padEnd(11)}{/} ` +
+                `{${T.secondary}-fg}${fmtBytes(rxT + txT).padEnd(11)}{/}`
+            )
+        }
+        // 流量合計列
+        header.push(
+            `  {${T.subtext}-fg}${'Σ'.padEnd(14)}{/} ` +
+            `{${T.success}-fg}${fmtRate(liveRxSum).padEnd(12)}{/} ` +
+            `{${T.warning}-fg}${fmtRate(liveTxSum).padEnd(12)}{/} ` +
+            `{${T.accent}-fg}${fmtBytes(totRxSum).padEnd(11)}{/} ` +
+            `{${T.accent}-fg}${fmtBytes(totTxSum).padEnd(11)}{/} ` +
+            `{${T.secondary}-fg}${fmtBytes(totRxSum + totTxSum).padEnd(11)}{/}`
+        )
+        // 聚合即時頻寬走勢 sparkline(最近約 2 分鐘)
+        if (trafficSpark.length > 0) {
+            const cur  = trafficSpark[trafficSpark.length - 1]
+            const peak = Math.max(...trafficSpark)
+            header.push('')
+            header.push(`  {${T.subtext}-fg}Throughput{/}  {${T.primary}-fg}${sparkline(trafficSpark)}{/}  {${T.muted}-fg}now ${fmtRate(cur)} · peak ${fmtRate(peak)}{/}`)
         }
         return header.join('\n')
     }
 
     let helpsTocs = []  // [{ level, label, lineNo }]
-    function buildHelps() {
-        const tocs = []
-        const lines = []
-        const L = (s) => lines.push(s)
-        const H = (label) => { tocs.push({ level: 0, label, lineNo: lines.length }); L(`  {${T.primary}-fg}{bold}▎${label}{/bold}{/}`) }
-        const SH = (label) => { tocs.push({ level: 1, label, lineNo: lines.length }); L(`  {${T.secondary}-fg}{bold}${label}{/bold}{/}`) }
-        const K  = (k) => `{${T.accent}-fg}${k}{/}`
-        const C  = (c) => `{${T.warning}-fg}${c}{/}`
-        const D  = (d) => `{${T.muted}-fg}${d}{/}`
-        const row = (left, right) => `    ${left.padEnd(28)} ${right}`
-
-        L('')
-        L(`  {${T.primary}-fg}{bold}Helps — One-For-All 使用說明{/bold}{/}`)
-        L(D('    本頁分成 [TUI 指令] 與 [Bot 指令] 兩部分。左側目錄 + Enter 跳節,滑鼠滾輪逐行捲動內容,Tab 切換目錄/內容焦點'))
-        L('')
-
-        // ════════════════════════════════════════════
-        // PART 1 — TUI 指令
-        // ════════════════════════════════════════════
-        H('TUI 指令')
-
-        SH('分頁與導航')
-        L(row(K('← / →') + ' 或 ' + K('1–5'), '切換分頁 (Dashboard / Console / Profiles / Helps / Settings)'))
-        L(row(K('/'), '進入指令模式 (聚焦下方 Command bar)'))
-        L(row(K('Esc'), '取消指令 / 離開 wizard 步驟'))
-        L(row(K('Enter'), '送出指令 / wizard 下一步'))
-        L(row(K('↑ / ↓') + D(' (指令模式)'), '走 Command 歷史'))
-        L(row(K('Ctrl-C'), '結束程式 (1=確認提示,2=graceful 關閉,3=SIGKILL;5s 內未確認自動取消)'))
-        L('')
-
-        SH('Console 分頁 — Bots 列表 (L / C / D / ▶◦)')
-        L(row(K('l'), '切換選取 bot 的日誌過濾 (L 綠=顯示)'))
-        L(row(K('d'), '切換選取 bot 的 DEBUG 訊息顯示 (D 綠=顯示)'))
-        L(D('    C 標誌來自 profiles.json 的 chat 設定 (read-only)'))
-        L(D('    ▶ 表示 childProcess 在執行,◦ 表示已停止'))
-        L('')
-
-        SH('Console 分頁 — Logs 區')
-        L(row(K('m'), '切換 mouse / copy 模式 (copy 模式可框選複製文字)'))
-        L(row(K('滾輪 / ↑↓ k j PgUp PgDn'), '捲動日誌'))
-        L(row(K('G'), '跳到底部 (恢復 follow)'))
-        L(row(K('g'), '跳到頂部 (停止 follow,標籤顯示新訊息計數)'))
-        L('')
-
-        SH('Console 分頁 — Infos / Detail')
-        L(D('    Infos: 名稱 / 座標 / Server / Ping / Balance / Coin / 任務佇列'))
-        L(D('    Detail: 當前任務的子模組進度 (autoquest / build / cleararea / villager / wms)'))
-        L(D('    每 3 秒向 child 拉取一次資料 + 收到 push 即更新'))
-        L(D('    bot 未執行時,Infos / Detail 不會顯示舊資料 (Dashboard 也是)'))
-        L('')
-
-        SH('Profiles 分頁 — Profiles 子頁 (預設)')
-        L(row(K('Tab'), '切換到 Connection 子頁'))
-        L(row(K('a'), '新增 profile (7 步驟 wizard,寫入 profiles.json)'))
-        L(row(K('e'), '編輯選取 profile (6 步驟,跳過 Name)'))
-        L(row(K('d'), '刪除選取 profile (y/n 確認)'))
-        L(row(K('J / K'), '往下 / 往上移動,順序寫入 profiles.json'))
-        L(row(K('s'), '切換選取 profile 的 auto-start (寫入 config.toml 的 ' + C('account.id') + ')'))
-        L(D('    ★ = 在 auto-start 列表中 (下次開啟會載入)'))
-        L(D('    任何 wizard 步驟按 Esc 都會取消整個流程'))
-        L('')
-
-        SH('Profiles 分頁 — Connection 子頁 (Tab 進入)')
-        L(row(K('Tab'), '切換回 Profiles 子頁'))
-        L(row(K('↑ / ↓'), '在區段間移動 (跳過 header)'))
-        L(row(K('PgUp / PgDn'), '快速翻頁'))
-        L(row(K('Home / End'), '跳到第一 / 最後一個可選列'))
-        L(row(K('e') + ' or ' + K('Enter'), '對 text/數值欄位開始 inline 編輯'))
-        L(row(K('s') + ' or ' + K('Space'), '切換 toggle (selectBestIP)'))
-        L(row(K('Enter') + D(' (action)'), '觸發動作 (例:重新偵測最佳 IP)'))
-        L(row(K('a'), '在當前列表加入新項目 (進入 inline 輸入)'))
-        L(row(K('d'), '刪除當前 list-item'))
-        L(row(K('J / K'), 'IP 清單往下 / 往上移序'))
-        L(D('    inline 編輯時 Enter=送出,Esc=取消;所有寫入會 surgical 改 config.toml'))
-        L(D('    可調項目:selectBestIP / reconnect_CD / CheckPing / pingThreshold / setting.ips'))
-        L('')
-
-        SH('Settings 分頁 — Discord / 全域日誌 / MC 白名單')
-        L(row(K('↑ / ↓'), '在區段間移動 (跳過 header)'))
-        L(row(K('PgUp / PgDn'), '快速翻頁'))
-        L(row(K('Home / End'), '跳到第一 / 最後一個可選列'))
-        L(row(K('e') + ' or ' + K('Enter'), '對 text 欄位開始 inline 編輯 (含 token)'))
-        L(row(K('s') + ' or ' + K('Space'), '切換 toggle'))
-        L(row(K('Enter') + D(' (action)'), '觸發動作 (套用啟用 / 測試 token / 發送測試訊息)'))
-        L(row(K('a / d'), '對白名單列表加入 / 刪除項目'))
-        L(D('    Token 顯示為遮罩,只有最後 4 碼可見;編輯時看完整 buffer'))
-        L(D('    全域 DEBUG/CHAT 切換為 in-memory,不寫入 config'))
-        L(D('    Discord 變更寫入 config.toml,「套用」可立即啟動/停止 client'))
-        L(D('    操作成功 / 失敗會在最下方狀態列以彩色訊息提示數秒'))
-        L('')
-
-        SH('Helps 分頁 — 本頁')
-        L(row(K('Tab'), '切換焦點 內容 ⇄ 目錄'))
-        L(row(K('滑鼠滾輪') + D(' (內容焦點)'), '逐行捲動右側內容 (1 行/格);左側目錄跟著 highlight'))
-        L(row(K('滑鼠滾輪') + D(' (目錄焦點)'), '移動目錄選擇 ±1,內容立即跳到該節開頭'))
-        L(row(K('Enter') + D(' (目錄焦點)'), '把內容跳到目前選中的目錄項'))
-        L(D('    本頁不再使用方向鍵 — 全部以滾輪 + Tab + Enter 操作'))
-        L('')
-
-        SH('Command Bar — 頂層指令 (前綴 .)')
-        L(D('    指令模式下輸入。沒有 . 前綴 = 透過目前選取 bot 發 MC 聊天'))
-        L(row(C('.list'), '列出所有 bot (Id / Name / Status / Type / CrtType)'))
-        L(row(C('.switch <name|id>'), '切換目前操作的 bot'))
-        L(row(C('.create [name]'), '啟動 profile (省略名稱=啟動目前選取的)'))
-        L(row(C('.c [name]'), '同 ' + C('.create')))
-        L(row(C('.reload'), '重新載入目前 bot (在原 reloadCD 之後重啟)'))
-        L(row(C('.exit'), '結束目前 bot 的 child / 取消其重啟計時'))
-        L(row(C('.all <text>'), '把 ' + D('<text>') + ' 送到所有正在執行的 bot'))
-        L(row(C('.task list'), '列出當前 bot 任務佇列 (線上 / 離線通用)'))
-        L(row(C('.task remove all'), '清空當前 bot 全部佇列任務'))
-        L(row(C('.task remove top'), '移除佇列最前面那筆 (執行中只清持久化,不中斷)'))
-        L(row(C('.task remove <N>'), '移除 1-indexed 第 N 筆任務'))
-        L(row(C('.ff'), 'force exit 整個程式 (' + D('process.exit(0)') + ')'))
-        L(row(C('.clear'), '清除 log 面板所有訊息'))
-        L(row(C('.test <args>'), '回顯 args 到 log,作測試用'))
-        L(row(C('/exit') + ' or ' + C('/quit'), '結束 TUI 與所有 bot (TUI 專用)'))
-        L(D('    ' + C('.task') + ' 對「離線 bot」會直接讀寫 ' + C('config/<bot>/task.json') + ',下次啟動生效'))
-        L('')
-
-        // ════════════════════════════════════════════
-        // PART 2 — Bot 指令
-        // ════════════════════════════════════════════
-        H('Bot 指令')
-        L(D('    透過目前選取 bot 執行子模組指令。三種來源:'))
-        L(D('      Console:加 ' + C('.') + ' 前綴送出,例 ' + C('.help') + '、' + C('.bt build')))
-        L(D('      遊戲內 DM:' + C('/m <bot> <cmd>') + ' 不加 . (發送者需在 ' + C('config.setting.whitelist') + ' 內)'))
-        L(D('      Discord:啟用 ' + C('discord_setting.activate') + ' 後可透過 channel 控制 (見 config.toml)'))
-        L('')
-
-        SH('basicCommand — 通用')
-        L(row(C('help / ? / usage'), '列出所有已註冊指令樹'))
-        L(row(C('info / i / stats'), '完整 bot 資訊 (座標 / 經驗 / 物品欄)'))
-        L(row(C('balance / bal / money'), '查綠 / 村莊幣餘額'))
-        L(row(C('xp / exp / experience'), '查經驗等級 / 點數 / 進度'))
-        L(row(C('plist'), '透過 /tpa 補完取得線上玩家清單'))
-        L(row(C('find <name...>'), '查詢玩家所在分流'))
-        L(row(C('vtrank / emrank'), '統計綠寶石合成次數 (raid 排行)'))
-        L(row(C('warp <name>'), '/warp 至指定點'))
-        L(row(C('ts / server <n>'), '傳送至分流 ' + D('<n>')))
-        L(row(C('tpc <owner> [idx]'), '傳送至玩家領地 (預設 idx=1)'))
-        L(row(C('goto <x> <y> <z>'), 'pathfinder fly 到座標'))
-        L(row(C('throw <slot...>'), '丟棄指定欄位'))
-        L(row(C('throwall'), '丟棄背包所有欄位 (slot 9–45)'))
-        L(row(C('qt'), '丟垃圾 (保留 netherite 工具 + 釣竿)'))
-        L(row(C('say <text>'), '透過 bot 發 MC 聊天訊息'))
-        L(row(C('payall / withdraw'), '把全部綠 pay 給發起者 (僅 ' + C('/m') + ')'))
-        L(row(C('地鳴宣言 [ch|jp]'), '發送地鳴宣言 (預設 ch)'))
-        L(row(C('exit'), '結束此 bot'))
-        L(row(C('tl'), '印出 taskManager 內任務佇列 (raw)'))
-        L(row(C('task list'), '美化版任務佇列 (▶ 標記執行中)'))
-        L(row(C('task remove <all|top|N>'), '移除佇列任務 (' + C('.task') + ' 為等價的離線可用版本)'))
-        L(row(C('click <slot>') + ' / ' + C('interact <x y z>'), '低階測試 (window click / 方塊互動)'))
-        L('')
-
-        SH('mp — 地圖畫 (mapart)')
-        L(row(C('mp set <file> <x> <y> <z>'), '設定 schematic 與放置點'))
-        L(row(C('mp info / i'), '查詢目前設定'))
-        L(row(C('mp material / m'), '在材料站生成所需材料'))
-        L(row(C('mp file / f'), '匯出材料清單為檔案'))
-        L(row(C('mp build / b'), '開始建造'))
-        L(row(C('mp pause / p'), '暫停建造'))
-        L(row(C('mp resume / r'), '繼續建造'))
-        L(row(C('mp stop / s'), '中止建造'))
-        L(row(C('mp open / o'), '開圖 (放置完成後將圖載入)'))
-        L(row(C('mp name / n'), '為地圖命名'))
-        L(row(C('mp copy / c'), '複印地圖'))
-        L(row(C('mp wrap / w'), '分裝 (整理至潛影盒)'))
-        L('')
-
-        SH('bt / lp / farm / buildtool — 投影建造 / 自動化建材')
-        L(row(C('bt set <file> <x> <y> <z>'), '設定 schematic 與放置點'))
-        L(row(C('bt info / i'), '查詢設定'))
-        L(row(C('bt build / b'), '開始建造'))
-        L(row(C('bt pause / p'), '暫停建造'))
-        L(row(C('bt resume / r'), '繼續建造'))
-        L(row(C('bt stop / s'), '中止建造'))
-        L(row(C('bt iron'), '鐵礦自動化'))
-        L(row(C('bt portal'), '傳送門'))
-        L(row(C('bt farm'), '瓜機種田'))
-        L(row(C('bt f4'), '四作物種田'))
-        L(row(C('bt prepare'), '種田前置'))
-        L(row(C('bt debug'), '印出當前背包統計'))
-        L('')
-
-        SH('ca / cleararea — TNT 區域清理')
-        L(row(C('ca set'), '設定清理範圍 (依 mpStation 設定)'))
-        L(row(C('ca expand'), '擴張範圍'))
-        L(row(C('ca shift'), '平移範圍'))
-        L(row(C('ca info / i'), '查詢設定'))
-        L(row(C('ca tnt'), '以 TNT 模式清理'))
-        L(row(C('ca execute / e'), '執行清理 (一般模式)'))
-        L(row(C('ca pause / p'), '暫停'))
-        L(row(C('ca resume / r'), '繼續'))
-        L(row(C('ca stop / s / c'), '中止'))
-        L('')
-
-        SH('aq / quest — 自動任務 (AutoQuest)')
-        L(row(C('aq start / run'), '開始跑任務'))
-        L(row(C('aq stop / s'), '停止'))
-        L(row(C('aq info / i'), '基本資訊'))
-        L(row(C('aq show'), '顯示任務狀態'))
-        L(row(C('aq detail'), '展開細節 (進度 / 獎勵 / 期限)'))
-        L(row(C('aq debug / d'), 'debug'))
-        L(D('    全域設定: ' + C('config/global/autoQuest.toml')))
-        L('')
-
-        SH('wms — Warehouse Management')
-        L(row(C('wms run / r'), '進入 daemon 模式 (自動拉取訂單執行)'))
-        L(row(C('wms stop / s'), '停止 daemon'))
-        L(row(C('wms update / u'), '更新桶子標記'))
-        L(row(C('wms query / q <item>'), '查詢庫存'))
-        L(row(C('wms withdraw / w <item> <qty>'), '出貨'))
-        L(row(C('wms deposit / d'), '入庫 (背包入倉)'))
-        L(row(C('wms dp'), '入庫到揀貨區'))
-        L(row(C('wms order / o <id>'), '手動執行單一訂單'))
-        L(row(C('wms sort'), '整理拒收區'))
-        L(row(C('wms test / t'), '測試流程'))
-        L(D('    參考: ' + C('wmsapi.md') + ' / ' + C('lib/wms/*')))
-        L('')
-
-        SH('vt / villager / v — 村民交易')
-        L(row(C('vt iron'), '鐵村民交易'))
-        L(row(C('vt mp / melonpumpkin'), '雙瓜交易'))
-        L(row(C('vt train'), '訓練村民'))
-        L(row(C('vt cr / curerename'), '治療 + 改名'))
-        L(row(C('vt put'), '放置村民'))
-        L(row(C('vt stop'), '停止當前流程'))
-        L('')
-
-        // ── 設定檔 ──
-        H('重要設定檔')
-        L(row(C('config.toml'), 'IP 選擇 / 重啟 CD / Discord / 啟動清單 (account.id)'))
-        L(row(C('profiles.json'), 'Bot 帳號 (name / type / username / host / port / debug / chat)'))
-        L(row(C('config/<bot>/*.json'), '個別 bot 的模組設定 (lp.json, villager.json...)'))
-        L(row(C('config/global/*.json'), '所有 bot 共用設定 (lp.json, autoQuest.toml...)'))
-        L(row(C('logs/*.log'), '日誌輸出'))
-        L('')
-
-        H('小提醒')
-        L(D('  ・指令模式下輸入無 . 前綴的文字 = 透過目前 bot 發 MC 聊天訊息'))
-        L(D('  ・enableEXPTUI=false 時退回到傳統 readline (無此 TUI 介面)'))
-        L(D('  ・selectBestIP=true 會自動 ping config.setting.ips 內的 IP 選最佳'))
-        L(D('  ・bot 執行子模組任務時可在 Console 分頁的 Detail 看到即時進度'))
-        L('')
-        return { lines, tocs }
-    }
-    function helpsTocItem(t) {
-        return t.level === 0
-            ? ` {${T.primary}-fg}{bold}${t.label}{/bold}{/}`
-            : `   {${T.subtext}-fg}${t.label}{/}`
-    }
     function renderHelps() {
         const { lines, tocs } = buildHelps()
         helpsTocs = tocs
@@ -1667,7 +1026,7 @@ function start(botManager, config, callbacks = {}) {
         toggle(tabContent,        isOther)
 
         if (isConsole) {
-            botList.focus()
+            applyConsoleFocus()
             renderInfos()
             renderDetail()
         } else if (isProfiles) {
@@ -1763,7 +1122,7 @@ function start(botManager, config, callbacks = {}) {
     function setNormalMode() {
         mode = 'normal'
         cmdBuffer = ''; cmdCursorPos = 0
-        if (activeTab === 1) botList.focus()
+        if (activeTab === 1) applyConsoleFocus()
         else if (activeTab === 2) {
             if (profilesView === 'connection') profilesConnBox.focus()
             else                                profilesList.focus()
@@ -2516,6 +1875,9 @@ function start(botManager, config, callbacks = {}) {
             if (mouseOn) screen.program.enableMouse()
             else         screen.program.disableMouse()
         } catch (_) {}
+        // Re-apply Console focus so copy mode focuses the log (wheel→arrows scroll log),
+        // and normal mode focuses the bot list (↑/↓ moves selection). See applyConsoleFocus.
+        if (activeTab === 1) applyConsoleFocus()
         updateLogHint()
         redraw()
     }
@@ -2669,6 +2031,8 @@ function start(botManager, config, callbacks = {}) {
             }
             return
         }
+        // Console tab: ↑/↓ 由 botList(keys:true,一般模式被 focus)內建移動選擇;
+        // 滾輪捲動日誌(見 screen.on('mouse') → userScrolled)。不需在此攔截方向鍵。
         // Settings tab: route ALL keys (including a/e/d/s/J/K) to the interactive panel
         // first; tab-switching, '/' and Ctrl-C are still handled below if the panel
         // didn't consume them.
@@ -2715,6 +2079,17 @@ function start(botManager, config, callbacks = {}) {
     // Tab is reserved for future command-bar autocomplete.
 
     // Screen-level wheel (elements have mouse:false so click can't steal focus).
+    // ── Console 分頁焦點 ──
+    // 固定模型:↑/↓ 操作 Bots 清單、滾輪捲動 Logs。
+    //   一般模式 → 焦點放 botList(keys:true 內建 ↑/↓ 移動選擇);滾輪走下方 screen.on('mouse') → userScrolled。
+    //   copy 模式(mouseOn=false,滑鼠追蹤關閉)→ 終端把滾輪轉成 ↑/↓ 方向鍵送給焦點 widget,
+    //                                            故改把焦點放 logBox,讓滾輪(→方向鍵)捲動日誌。
+    function applyConsoleFocus() {
+        if (mouseOn) botList.focus()
+        else         logBox.focus()
+        botListHint.setContent(` {${T.muted}-fg}↑/↓:bot  滾輪:log  l:log d:dbg t:chat{/}`)
+        screen.render()
+    }
     function userScrolled(dir) {
         if (activeTab !== 1) return
         logBox.scroll(dir)
@@ -2727,10 +2102,11 @@ function start(botManager, config, callbacks = {}) {
     // so wheel keeps working even though elements have mouse:false (to stop click from stealing focus).
     screen.on('mouse', (data) => {
         if (!data) return
-        // Console tab — scroll the log box (3 lines per tick, matches old behavior).
+        // Console tab — 滾輪只捲動日誌;bot 選擇用 ↑/↓。
         if (activeTab === 1) {
-            if (data.action === 'wheelup')   userScrolled(-3)
-            if (data.action === 'wheeldown') userScrolled(3)
+            const dir = data.action === 'wheelup' ? -1 : data.action === 'wheeldown' ? 1 : 0
+            if (!dir) return
+            userScrolled(dir * 3)
             return
         }
         // Helps tab — wheel behavior depends on which sub-widget has focus:
@@ -2780,7 +2156,12 @@ function start(botManager, config, callbacks = {}) {
         if (type === 'DEBUG' && botName && !globalDebugAll && !isDebugVisible(botName)) return
         // Filter bot-specific logs by toggle; always show CONSOLE / BOTMANAGER / SYSTEM
         if (botName && !isLogEnabled(botName)) return
-        appendLog(ansiToBlessed(formatted))
+        // Lines whose visible text ends with ) can bleed into subsequent lines as a
+        // blessed right-edge artifact; append a newline so the ) keeps its own line
+        // boundary (no trailing-space residual).
+        const visible = formatted.replace(/\x1b\[[0-9;]*m/g, '')
+        const out = /\)\s*$/.test(visible) ? formatted + '\n' : formatted
+        appendLog(ansiToBlessed(out))
     })
 
     // Suppress stray console.log so it doesn't corrupt the TUI buffer
@@ -2825,6 +2206,7 @@ function start(botManager, config, callbacks = {}) {
         try { console.log = origLog; console.error = origErr } catch (_) {}
         clearInterval(refreshTimer)
         clearInterval(infoPollTimer)
+        clearInterval(detailPollTimer)
         clearInterval(tipTimer)
         try { botManager.handle.off('data', onBotData) } catch (_) {}
     })

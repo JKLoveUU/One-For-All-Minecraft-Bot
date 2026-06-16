@@ -226,6 +226,14 @@ class BotManager {
     });
     child.on("exit", (exitCode) => {
       child.removeAllListeners();
+      // 結算本連線流量:把最後一筆 session 併入 committed,session 清零(下個子進程從 0 重新累加)
+      bot.trafficCommitted = {
+        rx: (bot.trafficCommitted?.rx || 0) + (bot.trafficSession?.rx || 0),
+        tx: (bot.trafficCommitted?.tx || 0) + (bot.trafficSession?.tx || 0),
+      };
+      bot.trafficSession = { rx: 0, tx: 0 };
+      bot.trafficRate = { rx: 0, tx: 0 };   // 離線即時速率歸零
+      bot._trafficLastSample = null;        // 下個子進程第一筆樣本重新建立基準,不跨停機時段算速率
       if (bot.reloadCancel) { // 取消其他重啟
         clearTimeout(bot.reloadCancel);
         bot.reloadCancel = null;
@@ -294,6 +302,27 @@ class BotManager {
           this.setBotCrtType(bot, message.value);
           break;
         case "dataToParent":
+          // 記錄當前子進程回報的 session 流量(該連線累計,monotonic),並把跨重連總量掛到資料上
+          if (message.value && message.value.traffic) bot.trafficSession = message.value.traffic;
+          {
+            const totalRx = (bot.trafficCommitted?.rx || 0) + (bot.trafficSession?.rx || 0);
+            const totalTx = (bot.trafficCommitted?.tx || 0) + (bot.trafficSession?.tx || 0);
+            // 即時速率:由「累計總量」的差分 / 時間差算出(總量跨重連連續,差分乾淨)
+            const now = Date.now();
+            const last = bot._trafficLastSample;
+            if (last && now > last.t) {
+              const dt = (now - last.t) / 1000;
+              bot.trafficRate = {
+                rx: Math.max(0, (totalRx - last.rx) / dt),
+                tx: Math.max(0, (totalTx - last.tx) / dt),
+              };
+            } else {
+              bot.trafficRate = { rx: 0, tx: 0 };
+            }
+            bot._trafficLastSample = { t: now, rx: totalRx, tx: totalTx };
+            message.value.trafficTotal = { rx: totalRx, tx: totalTx };
+            message.value.trafficRate = bot.trafficRate;
+          }
           this.handle.emit("data", message.value, bot.name);
           break;
         case "event":
